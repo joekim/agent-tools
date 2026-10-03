@@ -18,7 +18,7 @@ else {
   await app.whenReady();
   const settingsFile = path.join(app.getPath('userData'), 'activity.json');
   try { pinned = JSON.parse(fs.readFileSync(settingsFile, 'utf8')).pinned !== false; } catch {}
-  window = new BrowserWindow({ width: 370, height: 550, minWidth: 330, minHeight: 300, title: 'Media Hub Activity', alwaysOnTop: pinned,
+  window = new BrowserWindow({ width: 320, height: 190, useContentSize: true, minWidth: 280, minHeight: 200, title: 'Media Hub Activity', alwaysOnTop: pinned,
     backgroundColor: '#111821', autoHideMenuBar: true, webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
   window.on('close', event => { if (!quitting) { event.preventDefault(); window.hide(); } });
   window.webContents.on('will-navigate', event => event.preventDefault());
@@ -43,6 +43,11 @@ else {
     fs.writeFileSync(settingsFile, JSON.stringify({ pinned }));
   });
   ipcMain.handle('status:hide', event => { trusted(event); window.hide(); });
+  ipcMain.handle('status:view', (event, kind) => {
+    trusted(event);
+    if (kind !== null && !['image', 'voice'].includes(kind)) return;
+    window.setContentSize(kind ? 600 : 320, kind ? 600 : 190);
+  });
   ipcMain.handle('status:open', async (event, kind, id) => {
     trusted(event);
     if (!['image', 'voice'].includes(kind) || typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id)) return;
@@ -64,6 +69,7 @@ else {
     if (!quitting) timer = setTimeout(poll, 3000);
   }
   await window.loadFile(path.join(root, 'index.html'));
+  window.show();
   await poll();
   if (process.argv.includes('--smoke-test')) {
     // Local renderer/IPC verification without submitting any generation jobs.
@@ -73,6 +79,13 @@ else {
     fs.writeFileSync(path.join(output, 'state.json'), JSON.stringify(snapshot, null, 2));
     await new Promise(resolve => setTimeout(resolve, 3500));
     fs.writeFileSync(path.join(output, 'window.png'), (await window.webContents.capturePage()).toPNG());
+    await window.webContents.executeJavaScript("document.querySelector('[data-kind=image]').click()");
+    await new Promise(resolve => setTimeout(resolve, 400));
+    if (window.getContentSize()[0] !== 600) throw new Error('Detail view did not expand');
+    fs.writeFileSync(path.join(output, 'detail.png'), (await window.webContents.capturePage()).toPNG());
+    await window.webContents.executeJavaScript("document.querySelector('#back').click()");
+    await new Promise(resolve => setTimeout(resolve, 400));
+    if (window.getContentSize()[0] !== 320) throw new Error('Compact view did not restore');
     await window.webContents.executeJavaScript('window.mediaStatus.pin(false)');
     if (window.isAlwaysOnTop()) throw new Error('Unpin failed');
     await window.webContents.executeJavaScript('window.mediaStatus.pin(true)');

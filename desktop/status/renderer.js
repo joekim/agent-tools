@@ -1,27 +1,58 @@
 const el = (tag, text, className) => { const node = document.createElement(tag); node.textContent = text; if (className) node.className = className; return node; };
-async function refresh() {
-  try {
-    const state = await window.mediaStatus.state();
-    document.querySelector('#pin').checked = state.pinned;
-    document.querySelector('#connection').textContent = state.online ? `${state.nodeId} · Connected` : 'Hub unavailable · reconnecting';
-    const root = document.querySelector('#services'); root.replaceChildren();
-    for (const s of state.services || []) {
-      const card = el('section', ''); const row = el('div', '', 'row');
-      row.append(el('h2', s.kind === 'voice' ? 'Voice' : 'Image'), el('span', s.state, `badge ${s.state}`)); card.append(row);
-      if (s.queued) card.append(el('p', `${s.queued} queued`, 'muted'));
-      for (const j of [...s.active, ...s.recent.slice(0, 1)]) {
-        const job = el('div', '', 'job');
-        job.append(el('div', `${j.id.slice(0, 8)} · ${j.phase || j.status}`));
-        if (j.elapsedSeconds !== null) job.append(el('div', `${Math.floor(j.elapsedSeconds / 60)}m ${j.elapsedSeconds % 60}s`, 'muted'));
-        if (j.status === 'finished') { const open = el('button', s.kind === 'voice' ? 'Show audio files' : 'Open image'); open.onclick = () => window.mediaStatus.open(s.kind, j.id); job.append(open); }
-        card.append(job);
-      }
-      if (!s.active.length && !s.recent.length) card.append(el('p', s.online ? 'No recent jobs' : 'Service unavailable', 'muted'));
-      root.append(card);
+let latest = { services: [] }, selected = null;
+const duration = seconds => seconds === null ? '' : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+async function navigate(kind) {
+  selected = kind;
+  document.body.classList.toggle('detail', !!kind);
+  document.querySelector('#back').hidden = !kind;
+  await window.mediaStatus.view(kind);
+  render();
+  document.querySelector(kind ? '#back' : '[data-kind]')?.focus();
+}
+function render() {
+  const focusKind = document.activeElement?.dataset.kind;
+  document.querySelector('#pin').checked = latest.pinned;
+  document.querySelector('h1').textContent = selected ? `${selected === 'voice' ? 'Voice' : 'Image'} activity` : 'Media Hub';
+  document.querySelector('#connection').textContent = latest.online ? `${latest.nodeId} · Live · Updates every 3s` : 'Hub unavailable · Reconnecting…';
+  const root = document.querySelector('#services'); root.replaceChildren();
+  const services = ['image', 'voice'].map(kind => latest.services.find(s => s.kind === kind) || { kind, state: 'offline', online: false, active: [], recent: [], queued: 0 });
+  for (const s of services.filter(s => !selected || s.kind === selected)) {
+    if (!selected) {
+      const card = el('button', '', 'service'); card.dataset.kind = s.kind;
+      card.setAttribute('aria-label', `${s.kind} ${s.state}, open details`);
+      const current = s.active[0];
+      card.append(el('span', '', `dot ${s.state}`), el('strong', s.kind === 'voice' ? 'Voice' : 'Image'),
+        el('span', current ? `${s.state} · ${duration(current.elapsedSeconds)}${s.queued ? ` · ${s.queued} queued` : ''}` : s.state, 'summary'), el('span', '›', 'chevron'));
+      card.onclick = () => navigate(s.kind); root.append(card);
+      continue;
     }
-  } catch { document.querySelector('#connection').textContent = 'Status unavailable'; }
+    const heading = el('div', '', 'row'); heading.append(el('h2', 'Current status'), el('span', s.state, `badge ${s.state}`)); root.append(heading);
+    root.append(el('p', s.active.length ? `${s.active.length} active · ${s.queued} queued` : s.online ? 'No generation in progress.' : 'Service status is unavailable.', 'muted'));
+    for (const [title, jobs] of [['In progress', s.active], ['Recent jobs', s.recent]]) {
+      if (!jobs.length) continue;
+      root.append(el('h2', title));
+      for (const j of jobs) {
+        const job = el('section', '', 'job'); const row = el('div', '', 'row');
+        row.append(el('strong', j.status), el('span', duration(j.elapsedSeconds), 'muted')); job.append(row);
+        job.append(el('p', j.id, 'job-id'));
+        if (j.phase && j.status !== 'finished') job.append(el('p', `Phase: ${j.phase}`, 'muted'));
+        if (j.startedAt) job.append(el('p', new Date(j.startedAt).toLocaleString(), 'muted'));
+        if (j.status === 'finished') {
+          const open = el('button', s.kind === 'voice' ? 'Show audio files' : 'Open image');
+          open.onclick = async () => { try { await window.mediaStatus.open(s.kind, j.id); } catch { open.textContent = 'Could not open result'; } }; job.append(open);
+        }
+        root.append(job);
+      }
+    }
+  }
+  if (focusKind) root.querySelector(`[data-kind="${focusKind}"]`)?.focus();
+}
+async function refresh() {
+  try { latest = await window.mediaStatus.state(); render(); }
+  catch { document.querySelector('#connection').textContent = 'Status unavailable'; }
   setTimeout(refresh, 3000);
 }
 document.querySelector('#pin').onchange = event => window.mediaStatus.pin(event.target.checked);
-document.querySelector('#hide').onclick = () => window.mediaStatus.hide();
+document.querySelector('#back').onclick = () => navigate(null);
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && selected) navigate(null); });
 refresh();
