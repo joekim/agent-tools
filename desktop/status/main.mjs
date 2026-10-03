@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, session } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, session, screen } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,8 +13,18 @@ let window, tray, quitting = false, timer, pinned = true;
 let state = { online: false, services: [] };
 let visibility = initialVisibility(), hideTimer;
 function visibilityAction(event) {
+  const previous = visibility;
   visibility = visibilityEvent(visibility, event);
   clearTimeout(hideTimer);
+  const autoPopup = visibility.visible && !visibility.manual && event.type === 'snapshot' && previous.signature !== visibility.signature;
+  if (autoPopup) {
+    window.setContentSize(420, 300);
+    const area = screen.getPrimaryDisplay().workArea;
+    const [width, height] = window.getSize();
+    window.setPosition(Math.max(area.x, area.x + area.width - width - 12), Math.max(area.y, area.y + area.height - height - 12));
+    window.webContents.send('status:update', { ...state, pinned, resetView: true });
+  }
+  window.setAlwaysOnTop(pinned || (visibility.visible && !visibility.manual));
   if (visibility.visible) {
     if (!window.isVisible()) visibility.manual ? window.show() : window.showInactive();
   } else window.hide();
@@ -28,7 +38,7 @@ else {
   await app.whenReady();
   const settingsFile = path.join(app.getPath('userData'), 'activity.json');
   try { pinned = JSON.parse(fs.readFileSync(settingsFile, 'utf8')).pinned !== false; } catch {}
-  window = new BrowserWindow({ width: 320, height: 235, useContentSize: true, minWidth: 280, minHeight: 200, title: 'Media Hub Activity', alwaysOnTop: pinned,
+  window = new BrowserWindow({ width: 420, height: 300, useContentSize: true, minWidth: 280, minHeight: 200, title: 'Media Hub Activity', alwaysOnTop: pinned,
     show: false, backgroundColor: '#111821', autoHideMenuBar: true, webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
   window.on('close', event => { if (!quitting) { event.preventDefault(); visibilityAction({ type: 'hide' }); } });
   window.webContents.on('will-navigate', event => event.preventDefault());
@@ -58,7 +68,7 @@ else {
     trusted(event);
     if (kind !== null && !['image', 'voice', 'tasks'].includes(kind)) return;
     visibilityAction({ type: 'open' });
-    window.setContentSize(kind ? 600 : 320, kind ? 600 : 235);
+    window.setContentSize(kind ? 600 : 420, kind ? 600 : 300);
   });
   ipcMain.handle('status:open', async (event, kind, id) => {
     trusted(event);
@@ -87,6 +97,8 @@ else {
     if (window.isVisible()) throw new Error('Startup should be quiet');
     visibilityAction({ type: 'snapshot', signature: 'synthetic-change' });
     if (!window.isVisible() || visibility.manual) throw new Error('Automatic peek failed');
+    const area = screen.getPrimaryDisplay().workArea, bounds = window.getBounds();
+    if (Math.abs(bounds.x + bounds.width - (area.x + area.width - 12)) > 1 || Math.abs(bounds.y + bounds.height - (area.y + area.height - 12)) > 1) throw new Error('Popup is not anchored above the taskbar');
     visibilityAction({ type: 'toggle' });
     if (!visibility.manual) throw new Error('Manual open must persist');
     // Local renderer/IPC verification without submitting any generation jobs.
@@ -96,13 +108,13 @@ else {
     fs.writeFileSync(path.join(output, 'state.json'), JSON.stringify(snapshot, null, 2));
     await new Promise(resolve => setTimeout(resolve, 3500));
     fs.writeFileSync(path.join(output, 'window.png'), (await window.webContents.capturePage()).toPNG());
-    await window.webContents.executeJavaScript("document.querySelector('[data-kind=image]').click()");
+    await window.webContents.executeJavaScript("document.querySelector('[data-kind=tasks]').click()");
     await new Promise(resolve => setTimeout(resolve, 400));
     if (window.getContentSize()[0] !== 600) throw new Error('Detail view did not expand');
     fs.writeFileSync(path.join(output, 'detail.png'), (await window.webContents.capturePage()).toPNG());
     await window.webContents.executeJavaScript("document.querySelector('#back').click()");
     await new Promise(resolve => setTimeout(resolve, 400));
-    if (window.getContentSize()[0] !== 320) throw new Error('Compact view did not restore');
+    if (window.getContentSize()[0] !== 420) throw new Error('Compact view did not restore');
     await window.webContents.executeJavaScript("document.querySelector('[data-kind=tasks]').click()");
     await new Promise(resolve => setTimeout(resolve, 400));
     if (await window.webContents.executeJavaScript("document.querySelector('h1').textContent") !== 'Task messages') throw new Error('Task details failed');

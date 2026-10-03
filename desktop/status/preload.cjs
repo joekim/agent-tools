@@ -4,5 +4,6 @@ contextBridge.exposeInMainWorld('mediaStatus', {
   pin: value => ipcRenderer.invoke('status:pin', value),
   open: (kind, id) => ipcRenderer.invoke('status:open', kind, id),
   hide: () => ipcRenderer.invoke('status:hide'),
-  view: kind => ipcRenderer.invoke('status:view', kind)
+  view: kind => ipcRenderer.invoke('status:view', kind),
+  onUpdate: callback => ipcRenderer.on('status:update', (_event, state) => callback(state))
 });

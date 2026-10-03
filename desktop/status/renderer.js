@@ -15,6 +15,14 @@ function render() {
   document.querySelector('h1').textContent = selected === 'tasks' ? 'Task messages' : selected ? `${selected === 'voice' ? 'Voice' : 'Image'} activity` : 'Media Hub';
   document.querySelector('#connection').textContent = latest.online ? `${latest.nodeId} · Live · Updates every 3s` : 'Hub unavailable · Reconnecting…';
   const root = document.querySelector('#services'); root.replaceChildren();
+  if (!selected) {
+    const n = latest.notifications?.[0];
+    const card = el('button', '', `notification ${n?.status || ''}`); card.dataset.kind = 'tasks';
+    card.append(el('span', n ? `${n.agent} · ${n.status === 'completed' ? 'Task complete' : n.status === 'blocked' ? 'Needs your attention' : 'Task failed'}` : 'Task notifications', 'eyebrow'),
+      el('strong', n?.title || 'Waiting for task updates'), el('span', n?.message || 'Completed tasks and blockers will appear here.', 'message'));
+    if (n) card.append(el('span', new Date(n.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · Click for details', 'notification-meta'));
+    card.onclick = () => navigate('tasks'); root.append(card);
+  }
   if (selected === 'tasks') {
     const messages = latest.notifications || [];
     if (!messages.length) root.append(el('p', 'No task messages yet.', 'muted'));
@@ -28,7 +36,7 @@ function render() {
     return;
   }
   const services = ['image', 'voice'].map(kind => latest.services.find(s => s.kind === kind) || { kind, state: 'offline', online: false, active: [], recent: [], queued: 0 });
-  for (const s of services.filter(s => !selected || s.kind === selected)) {
+  for (const s of services.filter(s => selected ? s.kind === selected : ['generating', 'queued'].includes(s.state))) {
     if (!selected) {
       const card = el('button', '', 'service'); card.dataset.kind = s.kind;
       card.setAttribute('aria-label', `${s.kind} ${s.state}, open details`);
@@ -57,14 +65,6 @@ function render() {
       }
     }
   }
-  if (!selected) {
-    const n = latest.notifications?.[0];
-    const card = el('button', '', 'service'); card.dataset.kind = 'tasks';
-    card.setAttribute('aria-label', 'Open task messages');
-    card.append(el('span', '', `dot ${n?.status || ''}`), el('strong', 'Tasks'), el('span', n ? `${n.agent}: ${n.title}` : 'No messages', 'summary'), el('span', '›', 'chevron'));
-    card.title = n ? `${n.status}: ${n.title}` : 'Task messages';
-    card.onclick = () => navigate('tasks'); root.append(card);
-  }
   if (focusKind) root.querySelector(`[data-kind="${focusKind}"]`)?.focus();
 }
 async function refresh() {
@@ -75,4 +75,9 @@ async function refresh() {
 document.querySelector('#pin').onchange = event => window.mediaStatus.pin(event.target.checked);
 document.querySelector('#back').onclick = () => navigate(null);
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && selected) navigate(null); });
+window.mediaStatus.onUpdate(state => {
+  latest = state;
+  if (state.resetView) { selected = null; document.body.classList.remove('detail'); document.querySelector('#back').hidden = true; }
+  render();
+});
 refresh();
