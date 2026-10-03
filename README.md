@@ -1,5 +1,11 @@
 # Agent Tools Hub
 
+## Desktop activity window
+
+Run `npm ci` and `npm run status:install` once, then `npm run status` opens the Electron tray app with an optional always-on-top window. It polls the authenticated hub `/v1/activity` endpoint every three seconds for image and voice jobs, including website and agent submissions. Close hides to tray; the tray menu can reopen or quit it. Pin preference persists. `scripts/install-status-startup.ps1` installs and launches the Windows login entry. Requires this checkout and development dependencies. The Mac UI is portable but not installed/tested there; a files-only Mac hub has no generation activity.
+
+The hub returns only job IDs, states, queue counts, and timing, never prompts, voice text, logs, or credentials. Voice history comes from the configured isolated runtime's persisted job list, gated by a live health check; image history comes from the image service. Offline means status is unavailable, not idle. Elapsed time includes queue time for image jobs. No percentage is shown because the workers do not provide reliable progress counts. Completed images open in the browser; completed voice jobs open their local output folder containing the audio archive. Credentials are resolved from native storage only in the desktop main process. No new listener or public port is used.
+
 ## Media Hub voice runtime
 
 Claude can generate voice automatically for the current task. Run `node scripts/install-voice-permissions.mjs` to install user-level Claude Code allow rules for discovery and the dedicated `voice_generate`, `voice_job`, and `voice_download` MCP tools, plus the shared instructions. Restart Claude after installing the new tools. The rules do not approve the general-purpose `call_tool` dispatcher. Existing ask/deny and managed policies still take precedence. See [Claude permission rules](https://code.claude.com/docs/en/permissions).

@@ -9,6 +9,7 @@ import { resolveToken } from './credentials.mjs';
 import { permitsTool, profileFor } from './profile.mjs';
 import { servePublication } from './publishing.mjs';
 import { controlWeb } from './control-web.mjs';
+import { activitySnapshot } from './activity.mjs';
 
 const ajv = new Ajv({ strict: false, allErrors: true });
 const namePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}$/;
@@ -144,6 +145,13 @@ export class Hub {
       if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, nodeId: this.config.nodeId });
       if (req.method === 'GET' && url.pathname === '/v1/snapshot') return json(res, 200, this.snapshot());
       if (req.method === 'GET' && url.pathname === '/v1/catalog') return json(res, 200, this.catalog());
+      if (req.method === 'GET' && url.pathname === '/v1/activity') {
+        // Share one short-lived snapshot across viewers; never resubmit generation.
+        if (!this.activityCache || Date.now() - this.activityCache.time > 2000) {
+          this.activityCache = { time: Date.now(), value: activitySnapshot(this) };
+        }
+        return json(res, 200, await this.activityCache.value);
+      }
       if (req.method === 'POST' && url.pathname === '/v1/peers/heartbeat') {
         const { nodeId } = await readJson(req, 4096);
         if (!this.peers.has(nodeId)) throw failure('Peer is not trusted; configure it locally first', 403);
