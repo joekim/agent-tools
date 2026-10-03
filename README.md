@@ -1,5 +1,11 @@
 # Agent Tools Hub
 
+## Party notes through Media Hub
+
+On Windows, open [Party notes](http://meesa.local:3002/party/) or use the website’s Party notes navigation. The hub mounts the existing DOS2 party server behind its existing port, preserving page navigation and `?refresh=1`. Agents discover `party-notes` and call the named operations. The backend stays on loopback port 8765; notes and save-reading code remain in the RPG project. This is LAN access, not internet publication.
+
+`node scripts/party-service.mjs` starts the configured backend hidden or detects it already running. Local config supplies `partyRuntime.python` (pythonw.exe on Windows), `partyRuntime.script` (absolute party/server.py path), and the existing `party-notes` service manifest. The browser mount only allows the eight known GET pages and the refresh flag, rejects foreign Host/Origin headers, rewrites local links, and uses a sandboxed page policy. If the backend is down, it reports unavailable. This launcher does not install login startup or crash recovery.
+
 ## Desktop activity window
 
 Agents can send task outcomes using discovered `media-hub.notify-task`, or the dedicated MCP `notify_task` with `{ "nodeId": "meesa", "agent": "claude", "title": "Website updated", "message": "Implemented the changes and passed checks.", "status": "completed", "eventId": "unique-task-outcome-id" }`. `blocked` and `failed` are also supported, plus optional `threadId`. Messages appear in the Tasks row and trigger the usual popup; click for details. History persists locally, capped at 100 messages, with retry deduplication by agent/eventId within that history. Messages are agent-reported outcomes, not independent proof of completion. No chat transcripts are monitored automatically.

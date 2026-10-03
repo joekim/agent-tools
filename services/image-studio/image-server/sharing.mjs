@@ -50,6 +50,7 @@ export function sharingScript() {
       const brand = document.createElement('a'); brand.href = '/'; brand.textContent = 'Media Hub'; brand.style.color = 'inherit';
       const agents = document.createElement('a'); agents.href = '/agents'; agents.textContent = 'AI access'; agents.style.color = 'inherit';
       bar.append(brand);
+      if (site.modelUse !== false) { const party = document.createElement('a'); party.href = '/party/'; party.textContent = 'Party notes'; party.style.color = 'inherit'; bar.append(party); }
       if (site.modelUse !== false) { const controls = document.createElement('a'); controls.href = '/controls'; controls.textContent = 'Extract controls'; controls.style.color = 'inherit'; bar.append(controls); }
       bar.append(agents, button, link); document.body.prepend(bar);
       if (site.generationEnabled === false) {

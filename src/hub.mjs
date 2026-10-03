@@ -10,6 +10,7 @@ import { permitsTool, profileFor } from './profile.mjs';
 import { servePublication } from './publishing.mjs';
 import { controlWeb } from './control-web.mjs';
 import { activitySnapshot } from './activity.mjs';
+import { partyWeb } from './party-web.mjs';
 
 const ajv = new Ajv({ strict: false, allErrors: true });
 const namePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}$/;
@@ -168,6 +169,7 @@ export class Hub {
     try { pathname = new URL(req.url, 'http://localhost').pathname; }
     catch { return json(res, 400, { error: 'Invalid request URL' }); }
     if (pathname === '/controls' || pathname === '/api/controls' || pathname.startsWith('/api/controls/')) return void controlWeb(req, res, this);
+    if (pathname === '/party' || pathname.startsWith('/party/')) return void partyWeb(req, res, this);
     // Task routes always enter the authenticated handler, regardless of method.
     if (!this.sharedStudio || pathname === '/health' || pathname === '/v1' || pathname.startsWith('/v1/')) return this.handle(req, res);
     this.sharedStudio.emit('request', req, res);
