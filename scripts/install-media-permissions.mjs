@@ -6,7 +6,7 @@ import { mergeInstructions } from '../src/agent-instructions.mjs';
 
 // Called by explicit voice/image installers; never grant the generic dispatcher.
 export function installMediaPermissions(kind, server = 'agent-tools') {
-  if (!['voice', 'image'].includes(kind)) throw new Error('Expected voice or image.');
+  if (!['voice', 'image', 'notifications'].includes(kind)) throw new Error('Expected voice, image or notifications.');
   if (!/^[a-zA-Z0-9_-]+$/.test(server)) throw new Error('Expected the configured MCP server name.');
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const directory = path.join(os.homedir(), '.claude');
@@ -17,7 +17,7 @@ export function installMediaPermissions(kind, server = 'agent-tools') {
   settings.permissions.allow ??= [];
   if (!Array.isArray(settings.permissions.allow)) throw new Error('permissions.allow must be an array.');
   const operations = kind === 'voice' ? ['generate', 'job', 'download'] : ['configurations', 'generate', 'jobs', 'job', 'download'];
-  const rules = ['discover_tools', ...operations.map(operation => `${kind}_${operation}`)].map(tool => `mcp__${server}__${tool}`);
+  const rules = ['discover_tools', ...(kind === 'notifications' ? ['notify_task'] : operations.map(operation => `${kind}_${operation}`))].map(tool => `mcp__${server}__${tool}`);
   const missing = rules.filter(rule => !settings.permissions.allow.includes(rule));
   if (missing.length) {
     if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.agent-tools-backup-${Date.now()}`);

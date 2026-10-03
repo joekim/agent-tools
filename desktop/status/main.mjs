@@ -28,7 +28,7 @@ else {
   await app.whenReady();
   const settingsFile = path.join(app.getPath('userData'), 'activity.json');
   try { pinned = JSON.parse(fs.readFileSync(settingsFile, 'utf8')).pinned !== false; } catch {}
-  window = new BrowserWindow({ width: 320, height: 190, useContentSize: true, minWidth: 280, minHeight: 200, title: 'Media Hub Activity', alwaysOnTop: pinned,
+  window = new BrowserWindow({ width: 320, height: 235, useContentSize: true, minWidth: 280, minHeight: 200, title: 'Media Hub Activity', alwaysOnTop: pinned,
     show: false, backgroundColor: '#111821', autoHideMenuBar: true, webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
   window.on('close', event => { if (!quitting) { event.preventDefault(); visibilityAction({ type: 'hide' }); } });
   window.webContents.on('will-navigate', event => event.preventDefault());
@@ -56,9 +56,9 @@ else {
   ipcMain.handle('status:hide', event => { trusted(event); visibilityAction({ type: 'hide' }); });
   ipcMain.handle('status:view', (event, kind) => {
     trusted(event);
-    if (kind !== null && !['image', 'voice'].includes(kind)) return;
+    if (kind !== null && !['image', 'voice', 'tasks'].includes(kind)) return;
     visibilityAction({ type: 'open' });
-    window.setContentSize(kind ? 600 : 320, kind ? 600 : 190);
+    window.setContentSize(kind ? 600 : 320, kind ? 600 : 235);
   });
   ipcMain.handle('status:open', async (event, kind, id) => {
     trusted(event);
@@ -103,6 +103,11 @@ else {
     await window.webContents.executeJavaScript("document.querySelector('#back').click()");
     await new Promise(resolve => setTimeout(resolve, 400));
     if (window.getContentSize()[0] !== 320) throw new Error('Compact view did not restore');
+    await window.webContents.executeJavaScript("document.querySelector('[data-kind=tasks]').click()");
+    await new Promise(resolve => setTimeout(resolve, 400));
+    if (await window.webContents.executeJavaScript("document.querySelector('h1').textContent") !== 'Task messages') throw new Error('Task details failed');
+    fs.writeFileSync(path.join(output, 'tasks.png'), (await window.webContents.capturePage()).toPNG());
+    await window.webContents.executeJavaScript("document.querySelector('#back').click()");
     await window.webContents.executeJavaScript('window.mediaStatus.pin(false)');
     if (window.isAlwaysOnTop()) throw new Error('Unpin failed');
     await window.webContents.executeJavaScript('window.mediaStatus.pin(true)');

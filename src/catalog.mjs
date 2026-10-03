@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { profileFor } from './profile.mjs';
 import { projectNamePattern } from './projects.mjs';
+import { notificationSchema } from './notifications.mjs';
 
 const object = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const text = { type: 'string', minLength: 1 };
@@ -44,6 +45,8 @@ export function detectServices(config) {
 
 export function builtinTools(config) {
   const tools = [{
+    name: 'media-hub.notify-task', modelUse: false, description: 'Send a task completion, failure or blocked notification to THIS node’s activity window. Include a short title and outcome, never secrets. Optional eventId deduplicates retries within the latest 100 notifications. This reports an agent claim, not independently verified completion.', inputSchema: notificationSchema
+  }, {
     name: 'media-hub.create-project', modelUse: false, description: 'Create a new project on THIS node under its configured projectsRoot (default ~/projects), initialize Git on main, and install shared AGENTS.md and CLAUDE.md instructions. Takes a simple folder name; refuses existing paths. Does not commit, publish, or create a remote repository. Inspect preserved directory if status is failed.',
     inputSchema: object({ name: { type: 'string', pattern: projectNamePattern } }, ['name'])
   }, {

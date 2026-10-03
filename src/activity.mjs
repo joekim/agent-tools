@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { profileFor } from './profile.mjs';
+import { readNotifications } from './notifications.mjs';
 
 export function summarizeJobs(kind, jobs, online, now = Date.now()) {
   const normalized = jobs.filter(j => /^[a-zA-Z0-9-]+$/.test(j.id || '')).map(j => {
@@ -21,7 +22,8 @@ export function summarizeJobs(kind, jobs, online, now = Date.now()) {
 }
 
 export async function activitySnapshot(hub) {
-  if (profileFor(hub.config) === 'files-only') return { nodeId: hub.config.nodeId, checkedAt: Date.now(), services: [] };
+  const notifications = hub.config.artifactsDir ? readNotifications(hub.config) : [];
+  if (profileFor(hub.config) === 'files-only') return { nodeId: hub.config.nodeId, checkedAt: Date.now(), services: [], notifications };
   const services = await Promise.all(['image', 'voice'].map(async kind => {
     try {
       let jobs;
@@ -41,5 +43,5 @@ export async function activitySnapshot(hub) {
       return summarizeJobs(kind, jobs, true);
     } catch { return summarizeJobs(kind, [], false); }
   }));
-  return { nodeId: hub.config.nodeId, checkedAt: Date.now(), services };
+  return { nodeId: hub.config.nodeId, checkedAt: Date.now(), services, notifications };
 }

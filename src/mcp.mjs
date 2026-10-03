@@ -64,4 +64,13 @@ for (const operation of ['configurations', 'generate', 'jobs', 'job', 'download'
     } catch (e) { return { ...output({ error: e.message }), isError: true }; }
   });
 }
+server.registerTool('notify_task', {
+  description: 'Notify the user in the owning Media Hub activity window when this task completes, fails or needs attention. No secrets. Use a stable eventId for safe retries; only report actual outcomes.',
+  inputSchema: { nodeId: z.string().min(1), agent: z.enum(['claude', 'codex', 'other']), title: z.string().min(1).max(120), message: z.string().min(1).max(2000), status: z.enum(['completed', 'blocked', 'failed']).default('completed'), threadId: z.string().min(1).max(200).optional(), eventId: z.string().min(1).max(200).optional() }
+}, async ({ nodeId, ...input }) => {
+  try {
+    const { config, url } = connection();
+    return output(await request(new URL('/v1/call', url), { token: config.token, method: 'POST', body: { nodeId, name: 'media-hub.notify-task', input } }));
+  } catch (e) { return { ...output({ error: e.message }), isError: true }; }
+});
 await server.connect(new StdioServerTransport());

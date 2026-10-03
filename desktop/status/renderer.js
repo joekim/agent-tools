@@ -12,9 +12,21 @@ async function navigate(kind) {
 function render() {
   const focusKind = document.activeElement?.dataset.kind;
   document.querySelector('#pin').checked = latest.pinned;
-  document.querySelector('h1').textContent = selected ? `${selected === 'voice' ? 'Voice' : 'Image'} activity` : 'Media Hub';
+  document.querySelector('h1').textContent = selected === 'tasks' ? 'Task messages' : selected ? `${selected === 'voice' ? 'Voice' : 'Image'} activity` : 'Media Hub';
   document.querySelector('#connection').textContent = latest.online ? `${latest.nodeId} · Live · Updates every 3s` : 'Hub unavailable · Reconnecting…';
   const root = document.querySelector('#services'); root.replaceChildren();
+  if (selected === 'tasks') {
+    const messages = latest.notifications || [];
+    if (!messages.length) root.append(el('p', 'No task messages yet.', 'muted'));
+    for (const n of messages) {
+      const card = el('section', '', 'job');
+      const row = el('div', '', 'row'); row.append(el('strong', n.title), el('span', n.status, 'badge'));
+      card.append(row, el('p', n.message), el('p', `${n.agent} · ${new Date(n.createdAt).toLocaleString()}`, 'muted'));
+      if (n.threadId) card.append(el('p', `Task: ${n.threadId}`, 'job-id'));
+      root.append(card);
+    }
+    return;
+  }
   const services = ['image', 'voice'].map(kind => latest.services.find(s => s.kind === kind) || { kind, state: 'offline', online: false, active: [], recent: [], queued: 0 });
   for (const s of services.filter(s => !selected || s.kind === selected)) {
     if (!selected) {
@@ -44,6 +56,14 @@ function render() {
         root.append(job);
       }
     }
+  }
+  if (!selected) {
+    const n = latest.notifications?.[0];
+    const card = el('button', '', 'service'); card.dataset.kind = 'tasks';
+    card.setAttribute('aria-label', 'Open task messages');
+    card.append(el('span', '', `dot ${n?.status || ''}`), el('strong', 'Tasks'), el('span', n ? `${n.agent}: ${n.title}` : 'No messages', 'summary'), el('span', '›', 'chevron'));
+    card.title = n ? `${n.status}: ${n.title}` : 'Task messages';
+    card.onclick = () => navigate('tasks'); root.append(card);
   }
   if (focusKind) root.querySelector(`[data-kind="${focusKind}"]`)?.focus();
 }

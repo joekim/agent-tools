@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { notifyTask, readNotifications } from '../src/notifications.mjs';
+import { activitySnapshot } from '../src/activity.mjs';
+import { activitySignature } from '../desktop/status/visibility.mjs';
+test('notifications persist, deduplicate, bound history and work in files-only activity', async t => {
+  const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-notify-'));
+  t.after(() => fs.rmSync(artifactsDir, { recursive: true, force: true }));
+  const config = { artifactsDir, nodeId: 'test', profile: 'files-only' };
+  const before = await activitySnapshot({ config });
+  const input = { agent: 'claude', title: 'Task done', message: '<script>plain text</script>', eventId: 'one' };
+  const first = notifyTask(input, config);
+  assert.equal(notifyTask(input, config).id, first.id);
+  assert.equal(readNotifications(config).length, 1);
+  const after = await activitySnapshot({ config });
+  assert.equal(after.notifications[0].status, 'completed');
+  assert.notEqual(activitySignature(before), activitySignature(after));
+  for (let i = 0; i < 105; i++) notifyTask({ ...input, eventId: String(i) }, config);
+  assert.equal(readNotifications(config).length, 100);
+});

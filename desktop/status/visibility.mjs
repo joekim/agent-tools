@@ -1,7 +1,7 @@
 export const popupMs = 10000;
 export const initialVisibility = () => ({ signature: null, manual: false, visible: false, until: null });
 export function activitySignature(snapshot) {
-  return JSON.stringify([snapshot.online, [...snapshot.services].sort((a, b) => a.kind.localeCompare(b.kind)).map(s =>
+  return JSON.stringify([snapshot.online, (snapshot.notifications || []).map(n => n.id), [...snapshot.services].sort((a, b) => a.kind.localeCompare(b.kind)).map(s =>
     [s.kind, s.state, s.queued, [...s.active, ...s.recent].map(j => [j.id, j.status, j.phase])])]);
 }
 export function visibilityEvent(state, event, now = Date.now()) {

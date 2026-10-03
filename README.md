@@ -2,6 +2,10 @@
 
 ## Desktop activity window
 
+Agents can send task outcomes using discovered `media-hub.notify-task`, or the dedicated MCP `notify_task` with `{ "nodeId": "meesa", "agent": "claude", "title": "Website updated", "message": "Implemented the changes and passed checks.", "status": "completed", "eventId": "unique-task-outcome-id" }`. `blocked` and `failed` are also supported, plus optional `threadId`. Messages appear in the Tasks row and trigger the usual popup; click for details. History persists locally, capped at 100 messages, with retry deduplication by agent/eventId within that history. Messages are agent-reported outcomes, not independent proof of completion. No chat transcripts are monitored automatically.
+
+Run `node scripts/install-notification-permissions.mjs` to allow Claude Code’s dedicated notification tool, and `node scripts/install-agents.mjs` to refresh global instructions. Restart agent sessions to pick up the tool/instructions. Other machines need the updated code and their own setup; pass their direct Windows MCP server name to the permission installer when appropriate. Task notifications are non-model operations available on Windows and Mac; delivery is to the node selected by the agent, not broadcast to all peers.
+
 The compact view has one clickable row per service with status and active elapsed time. Click a row to expand into a detailed job view with result actions; Back or Escape restores the small window. Result buttons appear only in the detail view.
 
 The window starts hidden. Job or connection changes show it without stealing focus for ten seconds; elapsed-time ticks do not trigger popups. Opening from the tray (including clicking during a popup), selecting a service, or changing Pin keeps it open until you close/hide it. Closing resumes automatic popups for subsequent changes. Pin controls always-on-top independently of this visibility behavior.

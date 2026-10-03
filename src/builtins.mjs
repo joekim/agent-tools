@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { publish, diagnostics } from './publishing.mjs';
 import { createProject } from './projects.mjs';
 import { controlStatus, extractControl, controlJob } from './controls.mjs';
+import { notifyTask } from './notifications.mjs';
 const exec = promisify(execFile);
 export async function builtinStatus(tool, config) {
   try {
@@ -37,6 +38,7 @@ export function captionText(vtt) {
   return out.join('\n');
 }
 export async function runBuiltin(name, input, config) {
+  if (name === 'media-hub.notify-task') return notifyTask(input, config);
   if (name === 'media-hub.extract-control') return extractControl(input, config);
   if (name === 'media-hub.control-job') return controlJob(input, config);
   if (name === 'media-hub.create-project') return createProject(input, config);

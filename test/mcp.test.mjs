@@ -18,11 +18,15 @@ test('real MCP stdio client initializes, discovers tools, and gets structured ca
   t.after(async () => { await client.close(); await hub.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.resolve('src/mcp.mjs')], env: { ...process.env, AGENT_TOOLS_CONFIG: configFile } }));
   const tools = await client.listTools();
-  assert.deepEqual(tools.tools.map(x => x.name).sort(), ['call_tool', 'discover_tools', 'image_configurations', 'image_download', 'image_generate', 'image_job', 'image_jobs', 'voice_download', 'voice_generate', 'voice_job']);
+  assert.deepEqual(tools.tools.map(x => x.name).sort(), ['call_tool', 'discover_tools', 'image_configurations', 'image_download', 'image_generate', 'image_job', 'image_jobs', 'notify_task', 'voice_download', 'voice_generate', 'voice_job']);
   const found = await client.callTool({ name: 'discover_tools', arguments: { query: 'youtube' } });
   assert.equal(JSON.parse(found.content[0].text).tools[0].nodeId, 'test-machine');
   const failed = await client.callTool({ name: 'call_tool', arguments: { nodeId: 'test-machine', name: 'nonexistent', input: {} } });
   assert.equal(failed.isError, true);
+  const notification = await client.callTool({ name: 'notify_task', arguments: { nodeId: 'test-machine', agent: 'codex', title: 'Done', message: 'Tests passed', eventId: 'test-outcome' } });
+  assert.equal(JSON.parse(notification.content[0].text).result.status, 'ready');
+  const duplicate = await client.callTool({ name: 'notify_task', arguments: { nodeId: 'test-machine', agent: 'codex', title: 'Done', message: 'Tests passed', eventId: 'test-outcome' } });
+  assert.equal(JSON.parse(duplicate.content[0].text).result.duplicate, true);
   const calls = [];
   hub.call = async args => { calls.push(args); return { id: 'voice-test', status: 'ready' }; };
   for (const operation of ['generate', 'job', 'download']) {
