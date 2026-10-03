@@ -4,23 +4,33 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readConfig } from '../../src/config.mjs';
 import { request } from '../../src/http.mjs';
+import { activitySignature, initialVisibility, visibilityEvent } from './visibility.mjs';
 
 app.setName('Media Hub Activity');
 const root = path.dirname(fileURLToPath(import.meta.url));
 const page = pathToFileURL(path.join(root, 'index.html')).href;
 let window, tray, quitting = false, timer, pinned = true;
 let state = { online: false, services: [] };
+let visibility = initialVisibility(), hideTimer;
+function visibilityAction(event) {
+  visibility = visibilityEvent(visibility, event);
+  clearTimeout(hideTimer);
+  if (visibility.visible) {
+    if (!window.isVisible()) visibility.manual ? window.show() : window.showInactive();
+  } else window.hide();
+  if (visibility.until !== null) hideTimer = setTimeout(() => visibilityAction({ type: 'expire' }), Math.max(0, visibility.until - Date.now()));
+}
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   void (async () => {
-  app.on('second-instance', () => { window?.show(); window?.focus(); });
-  app.on('before-quit', () => { quitting = true; clearTimeout(timer); });
+  app.on('second-instance', () => { if (window) { visibilityAction({ type: 'open' }); window.focus(); } });
+  app.on('before-quit', () => { quitting = true; clearTimeout(timer); clearTimeout(hideTimer); });
   await app.whenReady();
   const settingsFile = path.join(app.getPath('userData'), 'activity.json');
   try { pinned = JSON.parse(fs.readFileSync(settingsFile, 'utf8')).pinned !== false; } catch {}
   window = new BrowserWindow({ width: 320, height: 190, useContentSize: true, minWidth: 280, minHeight: 200, title: 'Media Hub Activity', alwaysOnTop: pinned,
-    backgroundColor: '#111821', autoHideMenuBar: true, webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
-  window.on('close', event => { if (!quitting) { event.preventDefault(); window.hide(); } });
+    show: false, backgroundColor: '#111821', autoHideMenuBar: true, webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
+  window.on('close', event => { if (!quitting) { event.preventDefault(); visibilityAction({ type: 'hide' }); } });
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -34,18 +44,20 @@ else {
   }
   tray = new Tray(icon(false));
   tray.setToolTip('Media Hub · Connecting');
-  tray.on('click', () => window.isVisible() ? window.hide() : window.show());
-  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Show activity', click: () => window.show() }, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
+  tray.on('click', () => visibilityAction({ type: 'toggle' }));
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Show activity', click: () => visibilityAction({ type: 'open' }) }, { label: 'Hide activity', click: () => visibilityAction({ type: 'hide' }) }, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
   function trusted(event) { if (event.sender !== window.webContents || event.senderFrame?.url !== page) throw new Error('Untrusted caller'); }
   ipcMain.handle('status:state', event => { trusted(event); return { ...state, pinned }; });
   ipcMain.handle('status:pin', (event, value) => {
     trusted(event); pinned = value === true; window.setAlwaysOnTop(pinned);
+    visibilityAction({ type: 'open' });
     fs.writeFileSync(settingsFile, JSON.stringify({ pinned }));
   });
-  ipcMain.handle('status:hide', event => { trusted(event); window.hide(); });
+  ipcMain.handle('status:hide', event => { trusted(event); visibilityAction({ type: 'hide' }); });
   ipcMain.handle('status:view', (event, kind) => {
     trusted(event);
     if (kind !== null && !['image', 'voice'].includes(kind)) return;
+    visibilityAction({ type: 'open' });
     window.setContentSize(kind ? 600 : 320, kind ? 600 : 190);
   });
   ipcMain.handle('status:open', async (event, kind, id) => {
@@ -65,13 +77,18 @@ else {
       state = { ...await request(`http://127.0.0.1:${config.port}/v1/activity`, { token: config.token, timeout: 6000 }), online: true };
     } catch { state = { online: false, services: [] }; }
     const busy = state.services.some(s => ['generating', 'queued'].includes(s.state));
+    visibilityAction({ type: 'snapshot', signature: activitySignature(state) });
     tray.setImage(icon(busy)); tray.setToolTip(!state.online ? 'Media Hub · Offline' : `Media Hub · ${state.services.map(s => `${s.kind}: ${s.state}`).join(' · ')}`);
     if (!quitting) timer = setTimeout(poll, 3000);
   }
   await window.loadFile(path.join(root, 'index.html'));
-  window.show();
   await poll();
   if (process.argv.includes('--smoke-test')) {
+    if (window.isVisible()) throw new Error('Startup should be quiet');
+    visibilityAction({ type: 'snapshot', signature: 'synthetic-change' });
+    if (!window.isVisible() || visibility.manual) throw new Error('Automatic peek failed');
+    visibilityAction({ type: 'toggle' });
+    if (!visibility.manual) throw new Error('Manual open must persist');
     // Local renderer/IPC verification without submitting any generation jobs.
     const snapshot = await window.webContents.executeJavaScript('window.mediaStatus.state()');
     const output = path.resolve(root, '../../.local/status-smoke');
