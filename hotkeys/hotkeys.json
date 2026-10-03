@@ -1,0 +1,23 @@
+﻿[
+    {
+        "name":  "DOS2 cooldowns",
+        "hotkey":  "Ctrl+Alt+C",
+        "command":  [
+                        "C:\\Users\\joeki\\projects\\rpg\\prototype-1\\research\\scripts\\dos2.cmd",
+                        "cooldowns"
+                    ]
+    },
+    {
+        "name":  "Screenshot",
+        "hotkey":  "Ctrl+Alt+S",
+        "command":  [
+                        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                        "-NoProfile",
+                        "-STA",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        "C:\\Users\\joeki\\projects\\agent-tools\\screenshot\\screenshot.ps1"
+                    ]
+    }
+]
