@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Media Hub · AI access</title>
+<style>body{font:16px/1.6 system-ui;background:#10151d;color:#eef2f7;max-width:900px;margin:36px auto;padding:0 20px}a{color:#a8f0d2}pre{padding:18px;background:#1b2431;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}li{margin:8px 0}</style>
+<nav><a href="/">Media Hub</a> · <a href="/assets/">Library</a></nav>
+<h1>Media Hub for AI agents</h1>
+<p>Media Hub is both a media library and a callable task service. Claude, Codex, and other MCP-compatible agents use the same <strong>agent-tools</strong> connection.</p>
+<ol><li>Connect the agent to the installed agent-tools MCP bridge.</li><li>Call <code>discover_tools</code> to get current machine IDs, availability, and input schemas.</li><li>Call <code>call_tool</code> with the exact machine, tool name, and inputs.</li></ol>
+<h2>Download a YouTube transcript</h2>
+<pre>discover_tools({"query":"YouTube"})
+
+call_tool({
+  "nodeId": "NODE_ID_FROM_DISCOVERY",
+  "name": "media-hub.transcript",
+  "input": {"url":"https://www.youtube.com/watch?v=VIDEO_ID", "language":"en"}
+})</pre>
+<p>The result contains transcript text and paths to saved text/VTT files on the owning machine. It downloads available captions; videos without captions return an error. No audio transcription is implied.</p>
+<h2>Connections and credentials</h2>
+<p>Assume the user is on a phone on the same network. Discover <code>media-hub.publish</code>, then send <code>{"path":"ABSOLUTE_OUTPUT_PATH"}</code> on the machine holding that file or folder. Return its ready hostname URL. For access outside the network, add <code>"audience":"external"</code>; the hub uploads to Dropbox <code>/ai-workspace</code> and checks public link access. Never publish externally by default.</p>
+<p>Use <code>media-hub.diagnostics</code> to check the LAN hostname, output path, storage, and Dropbox authorization. A successful local check does not verify phone reachability. Report failures instead of inventing share links.</p>
+<p>The website, files, and AI task API share port 3002. Task execution uses authenticated <code>/v1/</code> routes on that same listener; opening a gallery does not grant task access. Credentials are retrieved locally from the native OS store.</p>
+<p>For another local MCP client, launch <code>node /absolute/path/to/agent-tools/src/mcp.mjs</code> over stdio. For another machine, pair its hub first. The website URL alone does not grant an agent task access.</p>
+<h2>Available and planned</h2>
+<p>Local galleries, path publishing and transcript tasks are supported. Dropbox publishing requires native hub authorization. Image generation is disabled in this separate preview. Voice uses an existing external adapter; music is planned.</p>
+<p><a href="/api/capabilities">Machine-readable capability information</a></p>
+</html>

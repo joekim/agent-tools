@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Extract controls · Media Hub</title>
+<style>
+:root{color-scheme:dark}body{font:16px/1.6 system-ui;background:#10141d;color:#edf1f8;margin:0 auto;padding:24px;max-width:840px}a{color:#94c9ff}nav{display:flex;flex-wrap:wrap;gap:20px}h1{margin-bottom:4px}p{color:#b8c3d5}section{background:#1b2331;border:1px solid #354054;border-radius:16px;padding:24px;margin:20px 0}label{display:block;margin:12px 0}input,select,button{font:inherit;max-width:100%;box-sizing:border-box}select,button{padding:12px;border:1px solid #52617a;border-radius:8px;background:#25334b;color:white}button{cursor:pointer;background:#315da1}button:disabled{opacity:.5;cursor:wait}img{max-width:100%;border-radius:8px}#results{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}#results a{overflow-wrap:anywhere}#status{white-space:pre-wrap}small{color:#b8c3d5}
+</style></head><body>
+<nav aria-label="Media Hub"><a href="/">Home</a><a href="/assets/">Library</a><a href="/controls" aria-current="page">Extract controls</a><a href="/agents">AI access</a></nav>
+<h1>Extract control maps</h1><p>Keep a scene’s depth, outlines, or a person’s pose for another creation.</p>
+<p><strong>1. Upload → 2. Choose control → 3. Extract → 4. Download</strong></p>
+<form id="form"><section><h2>1. Choose an image or video</h2><label for="file">Source file · up to 20 MB</label><input id="file" type="file" accept=".png,.jpg,.jpeg,.webp,.mp4,.mov,.webm" required><p>PNG, JPEG, WebP, MP4, MOV, or WebM. Videos use the first 145 frames. Processing size is 512 pixels.</p>
+<h2>2. Choose what to preserve</h2><label for="mode">Control type</label><select id="mode"><option value="depth">Depth — scene layout and distance</option><option value="canny">Edges — outlines and shapes</option><option value="pose">Pose — human body, face, and hands</option></select><p>A still produces one map. A video produces a sequence. Pose needs a visible person.</p>
+<h2>3. Extract</h2><button id="submit" disabled>Checking availability…</button><p id="status" role="status" aria-live="polite"></p></section></form>
+<section id="output" hidden><h2>4. View and download</h2><p id="summary"></p><p><a id="share">Open this result again</a></p><div id="results"></div></section>
+<p>These maps guide a compatible model; they are not new models. LTX generation from the maps is not available in this interface yet.</p>
+<script>
+const $=id=>document.getElementById(id);let busy=false,online=false;
+async function api(url, options){const r=await fetch(url,options);const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data;}
+function button(){ $('submit').disabled=busy||!online;$('submit').textContent=busy?'Processing…':'Extract control map'; }
+async function poll(id){
+  try{const job=await api('/api/controls/'+id);
+    if(job.status==='ready'){
+      busy=false;button();$('status').textContent=job.warning||'Extraction complete.';$('output').hidden=false;$('summary').textContent=job.frames+' control frame(s) · '+job.mode;
+      $('share').href='/controls#'+id;$('results').replaceChildren();
+      for(const f of job.files){const card=document.createElement('div');if(f.name.endsWith('.png')){const img=document.createElement('img');img.src=f.url;img.alt=job.mode+' control map';img.loading='lazy';card.append(img);}const link=document.createElement('a');link.href=f.url;link.download=f.name;link.textContent='Download '+f.name;card.append(document.createElement('br'),link);$('results').append(card);}return;
+    }
+    if(['failed','unknown'].includes(job.status)){busy=false;button();$('status').textContent=job.error;return;}
+    $('status').textContent='Extracting your control map… You can reopen this page to check progress.';setTimeout(()=>poll(id),2000);
+  }catch(e){busy=false;button();$('status').textContent=e.message+' Reopen this result page to check the existing job; do not submit it again.';}
+}
+$('form').onsubmit=async event=>{event.preventDefault();const file=$('file').files[0];if(!file)return;if(file.size>20*1024*1024){$('status').textContent='Choose a file smaller than 20 MB.';return;}busy=true;button();$('output').hidden=true;$('status').textContent='Uploading…';
+  try{const params=new URLSearchParams({mode:$('mode').value,ext:file.name.split('.').pop().toLowerCase()});const job=await api('/api/controls?'+params,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file});location.hash=job.id;poll(job.id);}
+  catch(e){busy=false;button();$('status').textContent=e.message+' If the connection was interrupted, ask an agent to check for a submitted job before trying again.';}
+};
+(async()=>{try{const health=await api('/api/controls/status');online=health.online;$('status').textContent=online?'Ready to extract.':health.error;}catch(e){$('status').textContent=e.message;}button();const id=location.hash.slice(1);if(/^[a-f0-9-]{36}$/.test(id)){busy=true;button();poll(id);}})();
+</script></body></html>

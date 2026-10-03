@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Media Hub</title>
+<style>
+body{font:16px system-ui;background:#10151d;color:#eef2f7;max-width:1000px;margin:40px auto;padding:0 20px}h1{margin-bottom:8px}p{color:#abb8ca}form,article{background:#1b2431;border:1px solid #354357;border-radius:16px;padding:24px;margin:20px 0}label{display:block;margin:14px 0}[hidden]{display:none!important}input,select,textarea,button{font:inherit;padding:10px;border-radius:8px;border:1px solid #536379;background:#10151d;color:inherit;box-sizing:border-box}textarea{width:100%;min-height:110px}button{background:#a8f0d2;color:#10251d;cursor:pointer}a{color:#a8f0d2}.row{display:flex;gap:16px;flex-wrap:wrap}.row input{width:120px}article img{width:100%;max-height:650px;object-fit:contain;border-radius:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#ffc0b4}.status{font-size:14px;color:#a8f0d2}#message{white-space:pre-wrap}
+dialog{background:#1b2431;color:#eef2f7;border:1px solid #536379;border-radius:16px;width:min(1000px,90vw);max-height:90vh;padding:20px}dialog::backdrop{background:#000b}.paint-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.paint-tools label{margin:8px 0}.paint-tools input[type=color]{width:54px;height:42px;padding:3px}.paint-stage{position:relative;margin:16px auto;width:fit-content;max-width:100%;line-height:0}.paint-stage canvas{display:block;max-width:100%;max-height:55vh;width:auto;height:auto}.paint-stage #paintLayer{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;opacity:.5}button:disabled{opacity:.45;cursor:default}
+</style>
+<h1>Media Hub</h1><p>Media creation, local files, and tasks for AI agents. <a href="/agents">AI access &amp; capabilities</a></p><a href="/screenshots">Screenshots &amp; guides</a> · <a id="assetLibraryLink" href="/assets/">Asset library</a><p>Choose a model and describe your image. For pose guidance, add a reference photo or an extracted pose map before creating.</p>
+<details id="importPanel"><summary>Import a model from Civitai</summary>
+<form id="importForm"><label>Civitai page URL (.com or .red) <input id="importUrl" type="url" required placeholder="https://civitai.com/models/..." style="width:100%"></label>
+<label>Configuration name (optional) <input id="importName" maxlength="160"></label>
+<label>Base checkpoint for LoRAs <select id="importBase"><option value="">Automatic compatible base</option></select></label>
+<label>Civitai API key (optional; used only for this import) <input id="importToken" type="password" autocomplete="off" maxlength="512"></label>
+<p>Supports SDXL, Illustrious and Pony checkpoints and standard LoRAs. A link with modelVersionId imports that exact version; otherwise the latest version is used. Other model families need a separate workflow.</p>
+<button id="importSubmit">Download and add configuration</button><p id="importMessage" role="status"></p><div id="importJobs"></div></form></details>
+<form id="form">
+<label>Model <select id="model"><option value="krea2">Krea 2</option><option value="flux2-fast">FLUX.2 Klein 4B Â· fast</option><option value="flux2-base">FLUX.2 Klein 4B Â· base</option><option value="qwen-image-2.1">Qwen-Image-2.1</option><option value="qwen-edit-2509">Qwen Image Edit 2509 · fast edits</option><option value="wai-v17">WAI v17 · comic style</option></select></label>
+<div id="configInfo" hidden><p id="configDescription"></p><label>Saved configuration name <input id="configName" maxlength="160"></label><details id="characterOptions"><summary>Character / LoRA preset</summary>
+<p>Keep character details here and describe each scene in the main prompt. Click Save these defaults to apply these fields to future generations.</p>
+<label>Trigger words (one per line)<textarea id="configTriggers" maxlength="6020"></textarea></label>
+<label>Character details / prompt prefix<textarea id="configPrefix" maxlength="4000" placeholder="Appearance, outfit, or other details to include in every scene"></textarea></label>
+<label>Negative prompt<textarea id="configNegative" maxlength="4000" placeholder="Features or artifacts to avoid"></textarea></label>
+<label>Guidance (CFG)<input id="configCfg" type="number" min="1" max="20" step="0.5" value="7"></label>
+<p>Uses one LoRA with its compatible base checkpoint. Character and style LoRAs use the same importer.</p>
+</details><button id="saveConfig" type="button">Save these defaults</button></div>
+<label>Mode <select id="mode"><option value="generate">Generate</option><option value="edit">Edit an image</option><option value="img2img">Reimagine an image</option><option value="inpaint">Inpaint a selected area</option></select></label>
+<label id="styleStrengthLabel" hidden>LoRA strength (0 = off)<br><input id="styleStrength" type="number" min="0" max="1.5" step="0.05" value="0.75"></label>
+<label id="upload" hidden>Source image <input id="image" type="file" accept="image/png,image/jpeg,image/webp"></label>
+<div id="selectedSource" hidden><p>Editing this result. Describe what you want changed.</p><img id="sourcePreview" alt="Image selected for editing" style="max-width:100%;max-height:220px;border-radius:8px"><br><button id="clearSource" type="button">Choose a different image</button></div>
+<button id="paintSource" type="button" hidden>Paint inpainting mask</button><p id="maskSummary" hidden></p>
+<fieldset id="posePanel" hidden><legend>Body pose reference (optional)</legend>
+<p>Upload a clear image of one person. The detected body skeleton guides the pose; your selected model and prompt define the character. For best proportions, match output dimensions to the reference.</p>
+<label>Pose input type <select id="poseInputType"><option value="reference">Reference photo - detect pose</option><option value="map">Extracted pose map - use directly</option></select></label>
+<label>Pose reference <input id="poseImage" type="file" accept="image/png,image/jpeg,image/webp"></label>
+<img id="posePreview" hidden alt="Pose reference preview" style="max-height:180px;max-width:100%">
+<button id="clearPose" type="button">Clear pose</button>
+<label>Pose strength <input id="poseStrength" type="number" min="0" max="2" step="0.05" value="0.8"></label>
+<p id="poseMessage" role="status"></p></fieldset>
+<label>Prompt <textarea id="prompt" required maxlength="8000" placeholder="Describe your image, or the change you want to make."></textarea></label>
+<label id="negativePromptLabel" hidden>Negative prompt<textarea id="negativePrompt" maxlength="4000" placeholder="For example: frail, exaggerated proportions, crown, text, watermark"></textarea><small>Additional things to avoid for this image. Added to the model preset’s negative prompt. Leave blank to use the preset alone.</small></label>
+<label id="aspectLabel" hidden><input id="preserveAspect" type="checkbox" checked> Preserve source aspect ratio</label><p id="aspectNote" hidden>Output dimensions follow the source, rounded to supported sizes.</p>
+<div class="row"><label>Width<br><input id="width" type="number" min="256" max="1536" step="16" value="768" required></label><label>Height<br><input id="height" type="number" min="256" max="1536" step="16" value="768" required></label><label>Steps<br><input id="steps" type="number" min="1" max="40" value="8" required></label><label>Seed (optional)<br><input id="seed" inputmode="numeric" pattern="[0-9]*" placeholder="Random"></label><label id="strengthLabel" hidden>Redraw strength (lower keeps more of the source)<br><input id="strength" type="number" min="0" max="1" step="0.05" value="0.5"></label></div>
+<details id="advancedPanel"><summary>Advanced generation options</summary>
+<p>Your prompt is sent as written. Krea 2 settings appear below when Krea 2 is selected.</p>
+<div class="row"><label class="kreaOnly">TextFusion strength (0 = off)<br><input id="textfusion" type="number" min="0" max="2" step="0.1" value="0"></label>
+<label class="kreaOnly genOnly">Krea2T Enhancer <input id="enhancer" type="checkbox" checked></label>
+<label class="kreaOnly genOnly">Enhancer strength<br><input id="enhancerStrength" type="number" min="0" max="2" step="0.1" value="1"></label>
+<label class="kreaOnly genOnly">Enhancer text scale<br><input id="textScale" type="number" min="0.25" max="4" step="0.05" value="1"></label>
+<label class="kreaOnly genEdit">Rebalance multiplier (0 = off)<br><input id="rebalance" type="number" min="0" max="8" step="0.1" value="0"></label>
+<label class="kreaOnly genEdit">Projector patch<br><select id="filterBypass"><option value="off">Off</option><option value="2vector">2-vector</option><option value="3vector">3-vector</option></select></label>
+<label class="kreaOnly genEdit">Patch strength<br><input id="bypassStrength" type="number" min="0" max="5" step="0.1" value="1"></label>
+<label class="kreaOnly editOnly">Reference boost<br><input id="refBoost" type="number" min="0" max="1000" step="0.5" value="4"></label></div>
+<label class="kreaOnly genOnly">Assistant-side conditioning text (optional)<br><textarea id="thinkContent" maxlength="8000" placeholder="Experimental: additional conditioning, not an automatic prompt rewrite."></textarea></label>
+</details>
+<button id="submit">Create image</button><p id="message" role="status"></p>
+</form><h2>Your images</h2><div id="jobs"></div>
+<dialog id="painter" aria-labelledby="paintTitle">
+<h2 id="paintTitle">Select area to inpaint</h2>
+<p>Paint over the area you want the AI to change. Red areas will be edited; everything outside the mask stays unchanged. Erase removes areas from the selection.</p>
+<div class="paint-tools">
+<label>Tool <select id="paintTool"><option value="brush">Brush</option><option value="eraser">Eraser</option></select></label>
+
+<label>Size <input id="paintSize" type="range" min="1" max="150" value="20"> <output id="paintSizeValue">20 px</output></label>
+<button id="paintUndo" type="button">Undo</button><button id="paintRedo" type="button">Redo</button><button id="paintClear" type="button">Clear marks</button>
+</div>
+<div class="paint-stage"><canvas id="paintBase"></canvas><canvas id="paintLayer" aria-label="Drawing area"></canvas></div>
+<div class="paint-tools"><button id="paintApply" type="button">Use mask</button><button id="paintDownload" type="button">Download mask</button><button id="paintClose" type="button">Cancel</button></div>
+<p id="paintMessage" role="status"></p>
+</dialog>
+<script>
+const $=id=>document.getElementById(id);
+let selectedImage=null,selectionVersion=0,sourceSize=null,selectedMask=null,savedMaskStrokes=[],paintSourceData=null;
+function sourceDimensions(source){return new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve({width:image.naturalWidth,height:image.naturalHeight});image.onerror=()=>reject(Error('Could not read image dimensions.'));image.src=source;});}
+function fittedDimensions(width,height){
+ const ratio=width/height;
+ const scale=Math.min(1,1536/Math.max(width,height));
+ const targetArea=width*height*scale*scale;
+ let best,score=Infinity;
+ for(let w=256;w<=1536;w+=16)for(let h=256;h<=1536;h+=16){
+  const error=Math.abs(Math.log((w/h)/ratio));
+  const candidate=error*100+Math.abs(Math.log(w*h/targetArea))*0.01;
+  if(candidate<score){score=candidate;best={width:w,height:h};}
+ }
+ return best;
+}
+function syncAspect(){
+ const editing=$('mode').value!=='generate';
+ const inpaint=$('mode').value==='inpaint';
+ const locked=editing&&($('preserveAspect').checked||inpaint);$('preserveAspect').disabled=inpaint;
+ $('aspectLabel').hidden=!editing;$('aspectNote').hidden=!locked;
+ $('width').readOnly=locked;$('height').readOnly=locked;
+ if(locked&&sourceSize){const size=fittedDimensions(sourceSize.width,sourceSize.height);$('width').value=size.width;$('height').value=size.height;
+ $('aspectNote').textContent=`Source ${sourceSize.width} Ã— ${sourceSize.height} â†’ output ${size.width} Ã— ${size.height}.`+(Math.abs(size.width/size.height/sourceSize.width*sourceSize.height-1)>0.005?' The supported size limits require an approximate ratio.':'');if(inpaint)$('aspectNote').textContent=`Processing at ${size.width} Ã— ${size.height}; final image keeps the original ${sourceSize.width} Ã— ${sourceSize.height} dimensions.`;}
+}
+$('preserveAspect').onchange=syncAspect;
+
+function clearSource(){selectionVersion++;selectedImage=null;sourceSize=null;selectedMask=null;savedMaskStrokes=[];$('sourcePreview').removeAttribute('src');$('mode').onchange();}
+$('clearSource').onclick=()=>{$('image').value='';clearSource();};
+$('image').onchange=async()=>{
+ clearSource();const version=selectionVersion;const file=$('image').files[0];if(!file)return;
+ try{if(file.size>10*1024*1024)throw Error('Choose an image under 10 MB.');const dimensions=await sourceDimensions(await dataURL(file));if(version!==selectionVersion)return;sourceSize=dimensions;syncAspect();}catch(error){$('message').textContent=error.message;}
+};
+async function editResult(job,button,paint=false,reimagine=false){
+ const version=++selectionVersion;button.disabled=true;
+ try{
+  const response=await fetch('/images/'+job.id+'/image.png');
+  if(!response.ok)throw Error('Could not load this result. It may have been deleted.');
+  const blob=await response.blob();
+  if(blob.size>10*1024*1024)throw Error('This image exceeds the 10 MB editing limit.');
+  const source=await dataURL(blob);const dimensions=await sourceDimensions(source);if(version!==selectionVersion)return;sourceSize=dimensions;
+  selectedMask=null;savedMaskStrokes=[];selectedImage=source;$('sourcePreview').src=source;$('mode').value=reimagine?'img2img':paint?'inpaint':'edit';if(paint)$('strength').value=0.85;$('image').value='';
+  $('model').value=reimagine?job.settings.model:(job.settings.model==='wai-v17'||job.settings.model?.startsWith('civitai-'))?'qwen-edit-2509':job.settings.model||'krea2';
+  for(const key of ['width','height','steps'])$(key).value=job.settings[key];
+  if($('model').value==='qwen-edit-2509')$('steps').value=4;
+  $('seed').value='';
+  for(const [key,fallback] of [['textfusion',0],['rebalance',0],['filterBypass','off'],['bypassStrength',1],['refBoost',4]])$(key).value=job.settings[key]??fallback;
+  $('prompt').value=reimagine?job.settings.prompt:'';if(reimagine){$('negativePrompt').value=job.settings.negativePrompt??'';$('strength').value=.5;$('styleStrength').value=job.settings.styleStrength??.75;}$('prompt').placeholder='For example: Make the background brighter. Keep everything else unchanged.';
+  $('mode').onchange();$('message').textContent='Ready to edit. Your previous result will be kept.';
+  $('form').scrollIntoView({behavior:'smooth',block:'start'});$('prompt').focus({preventScroll:true});
+  if(paint)await openPainter(source);
+ }catch(error){$('message').textContent=error.message;}finally{button.disabled=false;}
+}
+
+$('mode').onchange=()=>{const model=$('model').value;const imported=model.startsWith('civitai-');const config=window.studioConfigs?.get(model);$('negativePromptLabel').hidden=!(imported||model==='wai-v17');$('posePanel').hidden=!(imported||model==='wai-v17');$('configInfo').hidden=!config;if(!config)window.configEditorId=null;if(config){if(window.configEditorId!==model){$('configName').value=config.name;$('configTriggers').value=config.triggers.join('\n');$('configPrefix').value=config.promptPrefix||'';$('configNegative').value=config.negativePrompt||'';$('configCfg').value=config.cfg??7;window.configEditorId=model;}$('configDescription').textContent='Base: '+config.baseName+'. '+(config.triggers.length?'Automatic trigger words: '+config.triggers.join(', ')+'. ':'')+config.note;}const allowed=imported?['generate','img2img']:model==='wai-v17'?['generate']:model==='qwen-edit-2509'?['edit']:['generate','edit','img2img','inpaint'];for(const option of $('mode').options)option.disabled=!allowed.includes(option.value);if(!allowed.includes($('mode').value))$('mode').value=allowed[0];const mode=$('mode').value,krea=model==='krea2';$('styleStrengthLabel').hidden=model!=='wai-v17'&&!config?.lora;$('steps').readOnly=model==='qwen-edit-2509';if(model==='qwen-edit-2509')$('steps').value=4;$('paintSource').hidden=mode==='generate'||model==='qwen-edit-2509'||imported;$('upload').hidden=mode==='generate'||!!selectedImage;$('selectedSource').hidden=mode==='generate'||!selectedImage;$('image').required=mode!=='generate'&&!selectedImage;$('maskSummary').hidden=mode!=='inpaint';$('maskSummary').textContent=selectedMask?'Mask ready. Only the selected area will be changed.':'Paint a mask before applying inpainting.';$('submit').textContent=mode==='inpaint'?'Apply inpainting':mode==='edit'?'Apply edit':'Create image';$('strengthLabel').hidden=!['img2img','inpaint'].includes(mode);for(const el of document.querySelectorAll('.kreaOnly'))el.hidden=!krea||el.classList.contains('genOnly')&&mode!=='generate'||el.classList.contains('genEdit')&&['img2img','inpaint'].includes(mode)||el.classList.contains('editOnly')&&mode!=='edit';syncAspect();};$('model').onchange=()=>{const config=window.studioConfigs?.get($('model').value);$('steps').value=config?config.steps:$('model').value==='flux2-fast'?4:$('model').value==='flux2-base'?20:['qwen-image-2.1','wai-v17'].includes($('model').value)?25:$('model').value==='qwen-edit-2509'?4:8;if(config)$('styleStrength').value=config.styleStrength;if(config||['wai-v17','qwen-edit-2509'].includes($('model').value)){$('width').value=1024;$('height').value=1024;}$('mode').onchange();};$('mode').onchange();
+let posePreviewUrl=null;
+$('poseImage').onchange=()=>{if(posePreviewUrl)URL.revokeObjectURL(posePreviewUrl);const file=$('poseImage').files[0];$('posePreview').hidden=!file;$('poseMessage').textContent='';if(file){if(file.size>10*1024*1024){$('poseImage').value='';$('posePreview').hidden=true;$('poseMessage').textContent='Choose a pose reference under 10 MB.';return;}posePreviewUrl=URL.createObjectURL(file);$('posePreview').src=posePreviewUrl;}};
+$('clearPose').onclick=()=>{$('poseImage').value='';$('poseImage').onchange();};
+const dataURL=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file);});
+$('form').onsubmit=async e=>{e.preventDefault();$('submit').disabled=true;try{const body={mode:$('mode').value,model:$('model').value,prompt:$('prompt').value,width:+$('width').value,height:+$('height').value,steps:+$('steps').value,seed:$('seed').value};if(body.model==='wai-v17'||body.model.startsWith('civitai-')){body.styleStrength=+$('styleStrength').value;body.negativePrompt=$('negativePrompt').value;}if(body.model==='krea2'){body.textfusion=+$('textfusion').value;if(body.mode==='generate'){Object.assign(body,{enhancer:$('enhancer').checked,enhancerStrength:+$('enhancerStrength').value,textScale:+$('textScale').value,thinkContent:$('thinkContent').value});}if(!['img2img','inpaint'].includes(body.mode)){Object.assign(body,{rebalance:+$('rebalance').value,filterBypass:$('filterBypass').value,bypassStrength:+$('bypassStrength').value});}if(body.mode==='edit')body.refBoost=+$('refBoost').value;}if(['img2img','inpaint'].includes(body.mode))body.strength=+$('strength').value;if(body.mode==='inpaint'){if(!selectedMask)throw Error('Paint and save an inpainting mask first.');body.mask=selectedMask;}if(body.mode!=='generate'){if(selectedImage){body.image=selectedImage;}else{const file=$('image').files[0];if(!file||file.size>10*1024*1024)throw Error('Choose an image under 10 MB.');body.image=await dataURL(file);}if($('preserveAspect').checked||body.mode==='inpaint'){const dimensions=await sourceDimensions(body.image);Object.assign(body,fittedDimensions(dimensions.width,dimensions.height));}}if(!$('posePanel').hidden&&$('poseImage').files[0]){body.poseImage=await dataURL($('poseImage').files[0]);body.poseStrength=+$('poseStrength').value;body.poseInputType=$('poseInputType').value;}const r=await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw Error(j.error);$('message').textContent='Queued. You can leave this page open or come back later.';await refresh();}catch(e){$('message').textContent=e.message;}finally{$('submit').disabled=false;}};
+let previous='';
+async function refresh(){try{const r=await fetch('/api/jobs');if(!r.ok)throw Error('Could not load jobs.');const list=await r.json();const snapshot=JSON.stringify(list);if(snapshot===previous)return;previous=snapshot;$('jobs').replaceChildren();for(const job of list){const card=document.createElement('article');const status=document.createElement('div');status.className='status';status.textContent=job.status+' Â· '+(job.settings.model||'krea2')+' Â· '+job.settings.mode+' Â· '+new Date(job.createdAt).toLocaleString();const p=document.createElement('p');p.textContent=job.settings.prompt;card.append(status,p);const negativePrompt=[job.settings.configuration?.negativePrompt,job.settings.negativePrompt].filter(value=>typeof value==='string'&&value.trim()).map(value=>value.trim()).join(', ');if(negativePrompt){const negative=document.createElement('p');negative.className='negative-prompt';negative.style.whiteSpace='pre-wrap';negative.style.overflowWrap='anywhere';const label=document.createElement('strong');label.textContent='Negative prompt: ';negative.append(label,document.createTextNode(negativePrompt));card.append(negative);}if(job.status==='completed'){const url='/images/'+job.id+'/image.png';const img=document.createElement('img');img.src=url;img.alt=job.settings.prompt;img.loading='lazy';const a=document.createElement('a');a.href=url;a.download=(job.settings.model||'krea2')+'-'+job.id+'.png';a.textContent='Download PNG';const meta=document.createElement('a');meta.href='/images/'+job.id+'/image.json';meta.textContent='Settings';const edit=document.createElement('button');edit.type='button';edit.textContent='Edit this image';edit.style.margin='12px 12px 12px 0';edit.onclick=()=>editResult(job,edit);const paint=document.createElement('button');paint.type='button';paint.textContent='Inpaint';paint.hidden=['wai-v17','qwen-edit-2509'].includes(job.settings.model)||job.settings.model?.startsWith('civitai-');paint.style.marginRight='12px';paint.onclick=()=>editResult(job,paint,true);card.append(img,edit,paint,a,document.createTextNode(' Â· '),meta);if(job.settings.poseEnabled){const poseLink=document.createElement('a');poseLink.href='/images/'+job.id+'/pose.png';poseLink.textContent='View detected pose';poseLink.target='_blank';card.append(document.createTextNode(' · '),poseLink);}if(job.settings.model?.startsWith('civitai-')){const remix=document.createElement('button');remix.type='button';remix.textContent='Reimagine with this model';remix.onclick=()=>editResult(job,remix,false,true);card.append(remix);}}if(job.error){const error=document.createElement('pre');error.textContent=job.error;card.append(error);}if(!['queued','running'].includes(job.status)){const del=document.createElement('button');del.type='button';del.textContent='Delete';const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.hidden=true;const feedback=document.createElement('span');feedback.setAttribute('role','status');let armed=false;cancel.onclick=()=>{armed=false;del.textContent='Delete';cancel.hidden=true;feedback.textContent='';};del.onclick=async()=>{if(!armed){armed=true;del.textContent='Confirm delete';cancel.hidden=false;feedback.textContent=' Delete this generation and its saved files? ';return;}del.disabled=true;cancel.disabled=true;feedback.textContent=' Deleting… ';try{const r=await fetch('/api/jobs/'+job.id,{method:'DELETE'});const result=await r.json();if(!r.ok)throw Error(result.error);$('message').textContent='Deleted image generation.';previous='';await refresh();}catch(e){feedback.textContent=' '+e.message;del.disabled=false;cancel.disabled=false;}};card.append(document.createElement('br'),del,cancel,feedback);}$('jobs').append(card);}}catch(e){$('message').textContent=e.message;}}
+const paintBase=$('paintBase'),paintLayer=$('paintLayer'),paintContext=paintLayer.getContext('2d');
+let paintStrokes=[],paintFuture=[],paintActive=null,paintPointer=null;
+function paintControls(){
+ $('paintUndo').disabled=!paintStrokes.length||!!paintActive;
+ $('paintRedo').disabled=!paintFuture.length||!!paintActive;
+ $('paintClear').disabled=!paintStrokes.length||!!paintActive;
+}
+function drawPaintStroke(stroke){
+ if(stroke.tool==='clear'){paintContext.clearRect(0,0,paintLayer.width,paintLayer.height);return;}
+ paintContext.globalCompositeOperation=stroke.tool==='eraser'?'destination-out':'source-over';
+ paintContext.strokeStyle=paintContext.fillStyle=stroke.color;paintContext.lineWidth=stroke.size;
+ paintContext.lineCap=paintContext.lineJoin='round';
+ const first=stroke.points[0];
+ paintContext.beginPath();paintContext.arc(first.x,first.y,stroke.size/2,0,Math.PI*2);paintContext.fill();
+ if(stroke.points.length>1){paintContext.beginPath();paintContext.moveTo(first.x,first.y);for(const point of stroke.points.slice(1))paintContext.lineTo(point.x,point.y);paintContext.stroke();}
+}
+function renderPaint(){paintContext.clearRect(0,0,paintLayer.width,paintLayer.height);for(const stroke of paintStrokes)drawPaintStroke(stroke);paintControls();}
+async function openPainter(source){
+ const image=new Image();image.src=source;await image.decode();
+ for(const canvas of [paintBase,paintLayer]){canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;}
+ paintBase.getContext('2d').drawImage(image,0,0);paintSourceData=source;paintStrokes=structuredClone(savedMaskStrokes);paintFuture=[];paintActive=null;paintPointer=null;
+ $('paintMessage').textContent=`${image.naturalWidth} Ã— ${image.naturalHeight} pixels. Brush size is measured in image pixels.`;
+ renderPaint();$('painter').showModal();
+}
+$('paintSource').onclick=async()=>{try{
+ let source=selectedImage;
+ if(!source){const file=$('image').files[0];if(!file)throw Error('Choose a source image first.');if(file.size>10*1024*1024)throw Error('Choose an image under 10 MB.');source=await dataURL(file);}
+ await openPainter(source);
+}catch(error){$('message').textContent=error.message;}};
+$('paintSize').oninput=()=>{$('paintSizeValue').textContent=$('paintSize').value+' px';};
+function paintPoint(event){const rect=paintLayer.getBoundingClientRect();return {x:(event.clientX-rect.left)*paintLayer.width/rect.width,y:(event.clientY-rect.top)*paintLayer.height/rect.height};}
+paintLayer.onpointerdown=event=>{
+ if(paintActive||event.button!==0)return;event.preventDefault();paintPointer=event.pointerId;paintLayer.setPointerCapture(paintPointer);
+ paintActive={tool:$('paintTool').value,color:'#ff4050',size:+$('paintSize').value,points:[paintPoint(event)]};
+ paintFuture=[];paintStrokes.push(paintActive);drawPaintStroke(paintActive);paintControls();
+};
+paintLayer.onpointermove=event=>{
+ if(!paintActive||event.pointerId!==paintPointer)return;
+ const point=paintPoint(event),last=paintActive.points.at(-1);paintActive.points.push(point);
+ drawPaintStroke({...paintActive,points:[last,point]});
+};
+function finishPaint(event){if(event.pointerId!==paintPointer)return;paintActive=null;paintPointer=null;paintControls();}
+paintLayer.onpointerup=finishPaint;paintLayer.onpointercancel=finishPaint;paintLayer.onlostpointercapture=finishPaint;
+$('paintUndo').onclick=()=>{if(paintStrokes.length){paintFuture.push(paintStrokes.pop());renderPaint();}};
+$('paintRedo').onclick=()=>{if(paintFuture.length){paintStrokes.push(paintFuture.pop());renderPaint();}};
+$('paintClear').onclick=()=>{paintStrokes.push({tool:'clear'});paintFuture=[];renderPaint();};
+function maskCanvas(){
+ const canvas=document.createElement('canvas');canvas.width=paintLayer.width;canvas.height=paintLayer.height;
+ const context=canvas.getContext('2d'),pixels=paintContext.getImageData(0,0,canvas.width,canvas.height);
+ for(let i=0;i<pixels.data.length;i+=4){const alpha=pixels.data[i+3];pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=alpha;pixels.data[i+3]=255;}
+ context.putImageData(pixels,0,0);return canvas;
+}
+$('paintApply').onclick=()=>{
+ const canvas=maskCanvas(),pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+ if(!pixels.some((value,index)=>index%4===0&&value>0)){$('paintMessage').textContent='Paint an area to inpaint first.';return;}
+ const mask=canvas.toDataURL('image/png');
+ if((mask.length-mask.indexOf(',')-1)*3/4>10*1024*1024){$('paintMessage').textContent='Mask exceeds the 10 MB limit.';return;}
+ selectedMask=mask;savedMaskStrokes=structuredClone(paintStrokes);selectionVersion++;selectedImage=paintSourceData;
+ sourceSize={width:paintBase.width,height:paintBase.height};$('sourcePreview').src=selectedImage;$('image').value='';
+ if($('mode').value!=='inpaint')$('strength').value=0.85;
+ $('mode').value='inpaint';$('mode').onchange();$('painter').close();$('message').textContent='Mask ready. Describe what should appear in the selected area, then apply inpainting.';
+};
+$('paintDownload').onclick=()=>{maskCanvas().toBlob(blob=>{if(!blob){$('paintMessage').textContent='Could not export the mask.';return;}const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='inpaint-mask.png';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('paintMessage').textContent='Mask downloaded: white edits, black preserves.';},'image/png');};
+$('paintClose').onclick=()=>$('painter').close();
+$('painter').onclose=()=>{paintActive=null;paintPointer=null;};
+refresh();setInterval(refresh,3000);
+</script><script>
+// Store only explicit non-secret preferences; never file inputs, image data or API keys.
+const preferenceKey='image-studio.preferences.v1';
+const preferenceFields=['model','mode','prompt','negativePrompt','width','height','steps','seed','styleStrength','strength','preserveAspect','textfusion','enhancer','enhancerStrength','textScale','rebalance','filterBypass','bypassStrength','refBoost','thinkContent','poseStrength'];
+let savedPreferences={};try{savedPreferences=JSON.parse(localStorage.getItem(preferenceKey)||'{}')||{};}catch{}
+let restoringPreferences=false;
+function restorePreferences(includeModel=true){
+ restoringPreferences=true;
+ for(const id of preferenceFields){
+  if(!includeModel&&['model','mode'].includes(id))continue;
+  const el=$(id),value=savedPreferences[id];if(value===undefined)continue;
+  if(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===value))continue;
+  if(el.type==='checkbox')el.checked=value===true;else if(typeof value==='string')el.value=value;
+ }
+ $('mode').onchange();restoringPreferences=false;
+}
+function savePreferences(){
+ if(restoringPreferences)return;
+ const values={};for(const id of preferenceFields){const el=$(id);values[id]=el.type==='checkbox'?el.checked:el.value;}
+ // A saved imported model is restored after the asynchronous catalog loads.
+ if(pendingModel)values.model=pendingModel;
+ for(const id of ['importPanel','advancedPanel'])values[id]=$(id).open;
+ savedPreferences=values;try{localStorage.setItem(preferenceKey,JSON.stringify(values));}catch{}
+}
+let pendingModel=typeof savedPreferences.model==='string'&&savedPreferences.model.startsWith('civitai-')?savedPreferences.model:null;
+restorePreferences();
+for(const id of ['importPanel','advancedPanel']){if(typeof savedPreferences[id]==='boolean')$(id).open=savedPreferences[id];$(id).addEventListener('toggle',savePreferences);}
+$('form').addEventListener('input',savePreferences);
+$('form').addEventListener('change',e=>{if(e.target.id==='model')pendingModel=null;savePreferences();});
+window.addEventListener('pagehide',savePreferences);
+window.addEventListener('studio-catalog-ready',()=>{if(pendingModel){if([...$('model').options].some(o=>o.value===pendingModel))restorePreferences();pendingModel=null;savePreferences();}});
+async function restrictModels(){const site=await(await fetch('/api/site')).json();if(!site.allowedModels)return;for(const option of [...$('model').options])if(!site.allowedModels.includes(option.value))option.remove();if(!$('model').value)$('model').value='wai-v17';$('model').onchange();$('importPanel').hidden=true;}
+window.addEventListener('studio-catalog-ready',()=>restrictModels().catch(console.error));
+restrictModels().catch(console.error);
+</script>
+<script src="/catalog.js"></script></html>

@@ -1,0 +1,14 @@
+{
+  "id": "example-console",
+  "description": "Illustrative console adapter. Replace origin and routes with verified endpoints before use.",
+  "baseUrl": "http://127.0.0.1:9999",
+  "healthPath": "/health",
+  "operations": {
+    "status": {
+      "method": "GET",
+      "path": "/status",
+      "description": "Read console status.",
+      "inputSchema": {"type":"object","properties":{},"additionalProperties":false}
+    }
+  }
+}
