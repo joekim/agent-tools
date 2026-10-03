@@ -29,4 +29,39 @@ server.registerTool('call_tool', {
   try { const { config, url } = connection(); return output(await request(new URL('/v1/call', url), { token: config.token, method: 'POST', body: args, timeout: 140000 })); }
   catch (e) { return { ...output({ error: e.message }), isError: true }; }
 });
+// Separate entry points let clients approve voice without approving every hub task.
+for (const operation of ['generate', 'job', 'download']) {
+  server.registerTool(`voice_${operation}`, {
+    description: `Media Hub voice.${operation} on a discovered Windows node. Use these dedicated tools for automatic voice workflows. Generate returns a job ID; poll voice_job and inspect completion before voice_download. Never blindly retry a timed-out generation.`,
+    inputSchema: operation === 'generate'
+      ? { nodeId: z.string().min(1), lines: z.array(z.string().min(1).max(300)).min(1).max(1000) }
+      : { nodeId: z.string().min(1), id: z.string().regex(/^[a-zA-Z0-9-]+$/) }
+  }, async ({ nodeId, lines, id }) => {
+    try {
+      const { config, url } = connection();
+      return output(await request(new URL('/v1/call', url), {
+        token: config.token, method: 'POST', timeout: 140000,
+        body: { nodeId, name: `voice.${operation}`, input: operation === 'generate' ? { lines } : { id } }
+      }));
+    } catch (e) { return { ...output({ error: e.message }), isError: true }; }
+  });
+}
+for (const operation of ['configurations', 'generate', 'jobs', 'job', 'download']) {
+  const byId = ['job', 'download'].includes(operation);
+  server.registerTool(`image_${operation}`, {
+    description: `Media Hub media-hub.${operation} on the owning node. Discover first and read image_configurations before generating. image_generate accepts the discovered generation payload as input. Only enabled models are available. Poll image_job, inspect completion, then image_download. Inspect image_jobs after an ambiguous submission; do not blindly retry.`,
+    inputSchema: operation === 'generate'
+      ? { nodeId: z.string().min(1), input: z.object({ prompt: z.string().min(1) }).passthrough() }
+      : byId ? { nodeId: z.string().min(1), id: z.string().regex(/^[a-zA-Z0-9-]+$/) }
+      : { nodeId: z.string().min(1) }
+  }, async ({ nodeId, input, id }) => {
+    try {
+      const { config, url } = connection();
+      return output(await request(new URL('/v1/call', url), {
+        token: config.token, method: 'POST', timeout: 140000,
+        body: { nodeId, name: `media-hub.${operation}`, input: operation === 'generate' ? input : byId ? { id } : {} }
+      }));
+    } catch (e) { return { ...output({ error: e.message }), isError: true }; }
+  });
+}
 await server.connect(new StdioServerTransport());

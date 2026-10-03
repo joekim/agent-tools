@@ -18,9 +18,37 @@ test('real MCP stdio client initializes, discovers tools, and gets structured ca
   t.after(async () => { await client.close(); await hub.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.resolve('src/mcp.mjs')], env: { ...process.env, AGENT_TOOLS_CONFIG: configFile } }));
   const tools = await client.listTools();
-  assert.deepEqual(tools.tools.map(x => x.name).sort(), ['call_tool', 'discover_tools']);
+  assert.deepEqual(tools.tools.map(x => x.name).sort(), ['call_tool', 'discover_tools', 'image_configurations', 'image_download', 'image_generate', 'image_job', 'image_jobs', 'voice_download', 'voice_generate', 'voice_job']);
   const found = await client.callTool({ name: 'discover_tools', arguments: { query: 'youtube' } });
   assert.equal(JSON.parse(found.content[0].text).tools[0].nodeId, 'test-machine');
   const failed = await client.callTool({ name: 'call_tool', arguments: { nodeId: 'test-machine', name: 'nonexistent', input: {} } });
   assert.equal(failed.isError, true);
+  const calls = [];
+  hub.call = async args => { calls.push(args); return { id: 'voice-test', status: 'ready' }; };
+  for (const operation of ['generate', 'job', 'download']) {
+    const input = operation === 'generate' ? { lines: ['Hello.'] } : { id: 'voice-test' };
+    const result = await client.callTool({ name: `voice_${operation}`, arguments: {
+      nodeId: 'test-machine', ...input,
+      // A permissive client must not repurpose an approved voice tool.
+      name: 'media-hub.generate', input: { model: 'other' }
+    } });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(calls.at(-1), { nodeId: 'test-machine', name: `voice.${operation}`, input });
+  }
+  const invalid = await client.callTool({ name: 'voice_generate', arguments: { nodeId: 'test-machine', lines: [] } });
+  assert.equal(invalid.isError, true);
+  assert.equal(calls.length, 3);
+  for (const operation of ['configurations', 'generate', 'jobs', 'job', 'download']) {
+    const input = operation === 'generate' ? { prompt: 'A mountain', model: 'wai-v17', poseStrength: 0.5 }
+      : ['job', 'download'].includes(operation) ? { id: 'image-test' } : {};
+    const args = operation === 'generate' ? { input } : input;
+    const result = await client.callTool({ name: `image_${operation}`, arguments: {
+      nodeId: 'test-machine', ...args, name: 'voice.generate'
+    } });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(calls.at(-1), { nodeId: 'test-machine', name: `media-hub.${operation}`, input });
+  }
+  const badImage = await client.callTool({ name: 'image_generate', arguments: { nodeId: 'test-machine', input: { prompt: '' } } });
+  assert.equal(badImage.isError, true);
+  assert.equal(calls.length, 8);
 });
