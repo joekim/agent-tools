@@ -4,6 +4,7 @@
 
 - Focus on helping me iterate on generated images.
 - Inspect the images and offer your own critique, as well as responding to my feedback.
+- Use a chat interface for discussing image revisions.
 - Keep lasting preferences in this Markdown file, with changes recorded in Git.
 
 ## Image preferences
