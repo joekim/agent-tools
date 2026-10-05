@@ -17,6 +17,16 @@ test('chat validates roles, total context, image bytes and strips only the data 
     Array.from({ length: 5 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'x'.repeat(5000) })),
   ]) assert.throws(() => validateChat({ messages }));
 });
+test('reference sheets and poses retain their exact image order without forwarding custom fields to Ollama', () => {
+  const roles = ['candidate','reference_sheet','pose_photo','pose_map'];
+  const result = validateChat({ messages: [{role:'user',content:'Combine these.',images:roles.map(() => image),image_roles:roles}] });
+  assert.equal(result[0].images.length,4);
+  assert.match(result[0].content,/Image 2: reference_sheet; Image 3: pose_photo; Image 4: pose_map/);
+  assert.equal(result[0].image_roles,undefined);
+  assert.throws(() => validateChat({messages:[{role:'user',content:'x',images:[image],image_roles:[]}]}),/exactly one role/);
+  assert.throws(() => validateChat({messages:[{role:'user',content:'x',images:[image],image_roles:['system']}]}));
+  assert.throws(() => validateChat({messages:[{role:'user',content:'x',images:[image,image,image,image]},{role:'assistant',content:'ok'},{role:'user',content:'more',images:[image]}]}),/four images/);
+});
 test('browser chat serves UI, checks origin/profile, retains follow-up context and releases busy state', async t => {
   let savedPreferences = 'Prefer muted colors.';
   const hub = { config: { profile: 'full' }, imageChatMemory: { read: async () => ({content:savedPreferences,revision:'test'}) } }; let body;

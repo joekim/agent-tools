@@ -170,7 +170,7 @@ export class Hub {
     try { pathname = new URL(req.url, 'http://localhost').pathname; }
     catch { return json(res, 400, { error: 'Invalid request URL' }); }
     if (pathname === '/controls' || pathname === '/api/controls' || pathname.startsWith('/api/controls/')) return void controlWeb(req, res, this);
-    if (['/image-chat', '/image-chat.js', '/image-chat.css', '/api/image-chat', '/api/image-chat/status', '/api/image-chat/memory'].includes(pathname)) return void imageChatWeb(req, res, this);
+    if (['/image-chat', '/image-chat.js', '/image-chat-pose.js', '/image-chat.css', '/api/image-chat', '/api/image-chat/status', '/api/image-chat/memory'].includes(pathname)) return void imageChatWeb(req, res, this);
     if (pathname === '/party' || pathname.startsWith('/party/')) return void partyWeb(req, res, this);
     // Task routes always enter the authenticated handler, regardless of method.
     if (!this.sharedStudio || pathname === '/health' || pathname === '/v1' || pathname.startsWith('/v1/')) return this.handle(req, res);
