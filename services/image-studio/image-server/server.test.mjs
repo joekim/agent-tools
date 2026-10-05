@@ -1,10 +1,32 @@
 import test from 'node:test';
 import http from 'node:http';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createImageServer, validate } from './server.mjs';
+import { createImageServer, validate, imageWorkerCommand } from './server.mjs';
+
+test('every model family uses the configured isolated backend',()=>{
+  for(const model of ['krea2','flux2-fast','flux2-base','qwen-image-2.1','qwen-edit-2509','wai-v17','civitai-2618470']){
+    const settings={model,mode:'generate',prompt:'test',...(model.startsWith('civitai-')?{configuration:{checkpoint:'example.safetensors'}}:{})};
+    const {python,args}=imageWorkerCommand({settings},os.tmpdir(),{python:'isolated-python',url:'http://127.0.0.1:8195'});
+    assert.equal(python,'isolated-python');
+    assert.equal(args[args.indexOf('--server')+1],'http://127.0.0.1:8195',model);
+    assert(!args.includes('http://127.0.0.1:8189'));
+  }
+});
+
+test('base catalog reads the configured isolated models directory',async t=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),'isolated-catalog-'));
+  const modelsDir=path.join(root,'models');
+  await mkdir(path.join(modelsDir,'checkpoints'),{recursive:true});
+  await writeFile(path.join(modelsDir,'checkpoints','Illustrious-XL-v1.0.safetensors'),'fixture');
+  const server=await createImageServer({dataDir:path.join(root,'jobs'),assetDir:path.join(root,'assets'),backend:{modelsDir}});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  t.after(async()=>{await new Promise(r=>server.close(r));await rm(root,{recursive:true,force:true});});
+  const catalog=await(await fetch(`http://127.0.0.1:${server.address().port}/api/configurations`)).json();
+  assert.deepEqual(catalog.bases.map(b=>b.id),['Illustrious-XL-v1.0.safetensors']);
+});
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=';
 test('pose maps retain their input type and isolated generation rejects unapproved models',async t=>{

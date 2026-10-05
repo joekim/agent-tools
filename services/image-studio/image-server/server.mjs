@@ -109,7 +109,7 @@ export function validate(input, configuration = null) {
   return { settings, image, mask, pose };
 }
 
-export function runImage(job, dir, backend = {}) {
+export function imageWorkerCommand(job, dir, backend = {}) {
   const bundled = path.join(process.env.USERPROFILE ?? '', 'Documents/Codex/apps/ComfyUI-YuE2/.venv/Scripts/python.exe');
   const python = backend.python || process.env.IMAGE_PYTHON || (existsSync(bundled) ? bundled : 'python');
   const s = job.settings;
@@ -119,7 +119,7 @@ export function runImage(job, dir, backend = {}) {
   const args = preset
     ? [path.join(here,'studio_models.py'), s.mode, '--model', s.configuration ? 'imported-sdxl' : s.model, '--prompt', s.prompt, '--output', path.join(dir,'image.png'), '--server', backend.url || process.env.COMFY_URL || 'http://127.0.0.1:8189']
     : flux
-    ? [path.join(root,'flux2/flux2.py'), s.mode, '--model', s.model, '--prompt', s.prompt, '--output', path.join(dir,'image.png'), '--server', process.env.FLUX2_COMFY_URL || 'http://127.0.0.1:8189']
+    ? [path.join(root,'flux2/flux2.py'), s.mode, '--model', s.model, '--prompt', s.prompt, '--output', path.join(dir,'image.png'), '--server', backend.url || process.env.FLUX2_COMFY_URL || 'http://127.0.0.1:8189']
     : s.model === 'qwen-image-2.1'
     ? [path.join(root,'qwen2/qwen.py'), s.mode, '--prompt', s.prompt, '--output', path.join(dir,'image.png'), '--server', backend.url || process.env.COMFY_URL || 'http://127.0.0.1:8189']
     : [path.join(root,'krea2/krea.py'), s.mode, '--prompt', s.prompt, '--output', path.join(dir,'image.png'), '--server', backend.url || process.env.COMFY_URL || 'http://127.0.0.1:8189'];
@@ -138,6 +138,11 @@ export function runImage(job, dir, backend = {}) {
   if (job.source) args.push('--image', path.join(dir,job.source));
   args[1] = command;
   if (job.mask) args.push('--mask', path.join(dir,job.mask));
+  return {python,args};
+}
+
+export function runImage(job, dir, backend = {}) {
+  const {python,args} = imageWorkerCommand(job, dir, backend);
   return new Promise((resolve,reject) => {
     const child = spawn(python,args,{cwd:root,windowsHide:true,shell:false});
     let log = '';
@@ -157,7 +162,7 @@ export async function createImageServer({ dataDir = studioSettings().dataDir, wo
   await mkdir(assetDir,{recursive:true});
   try { await writeFile(path.join(assetDir,'index.html'), '<!doctype html><html lang="en"><meta charset="utf-8"><title>Media Hub library</title><a href="/">Media Hub</a><h1>Library</h1><p>No galleries have been published on this machine yet.</p></html>', {flag:'wx'}); } catch(e) { if(e.code !== 'EEXIST') throw e; }
   const bundled = path.join(process.env.USERPROFILE ?? '', 'Documents/Codex/apps/ComfyUI-YuE2/.venv/Scripts/python.exe');
-  const catalog = await createCatalog({dataDir, python:process.env.IMAGE_PYTHON || (existsSync(bundled)?bundled:'python')});
+  const catalog = await createCatalog({dataDir, modelsDir:backend.modelsDir, python:backend.python || process.env.IMAGE_PYTHON || (existsSync(bundled)?bundled:'python')});
   const jobs = new Map();
   const save = async job => {
     const dest = path.join(dataDir,job.id,'job.json');
