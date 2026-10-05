@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { createMemoryStore } from '../src/image-chat-memory.mjs';
+const exec = promisify(execFile);
+
+test('memory survives reopening, commits only its file, rejects stale edits and reports failed commits honestly', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'image-chat-memory-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const git = async (...args) => (await exec('git', args, {cwd:root,windowsHide:true})).stdout.trim();
+  await git('init'); await git('config','user.name','Memory test'); await git('config','user.email','memory@example.invalid'); await git('config','commit.gpgsign','false');
+  await fs.mkdir(path.join(root,'memory'));
+  await fs.writeFile(path.join(root,'memory/image-chat.md'),'# Memory\n');
+  await git('add','memory/image-chat.md'); await git('commit','-m','Initial memory');
+  await fs.writeFile(path.join(root,'unrelated.txt'),'Unrelated work'); await git('add','unrelated.txt');
+  const store = createMemoryStore(root); const initial = await store.read();
+  const saved = await store.save({content:'# Memory\n\nPrefer soft light.\n', revision:initial.revision});
+  assert.equal(saved.committed,true); assert.ok(saved.commit);
+  assert.equal(await git('show','--format=','--name-only','HEAD'),'memory/image-chat.md');
+  assert.equal(await git('diff','--cached','--name-only'),'unrelated.txt');
+  assert.equal((await createMemoryStore(root).read()).content,saved.content);
+  await assert.rejects(store.save({content:'Stale replacement',revision:initial.revision}),/another window/);
+  await assert.rejects(store.save({content:'x'.repeat(6001),revision:saved.revision}),/6,000/);
+  await fs.writeFile(path.join(root,'.git/index.lock'),'test lock');
+  const uncommitted = await store.save({content:'# Memory\n\nPrefer gentle contrast.\n',revision:saved.revision});
+  assert.equal(uncommitted.committed,false); assert.match(uncommitted.error,/saved locally/);
+  assert.match((await store.read()).content,/gentle contrast/);
+  await fs.rm(path.join(root,'.git/index.lock'));
+  const retry = await store.save({content:uncommitted.content, revision:uncommitted.revision});
+  assert.equal(retry.committed,true); assert.equal(await git('diff','--cached','--name-only'),'unrelated.txt');
+});

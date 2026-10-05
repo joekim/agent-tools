@@ -1,5 +1,15 @@
 # Agent Tools Hub
 
+## Local Image Chat
+
+Lasting preferences live in the tracked [`memory/image-chat.md`](memory/image-chat.md) file and are loaded on every reply. Open **Memory**, edit the Markdown, then choose **Save & commit**. Only that file is committed; unrelated staged work is excluded. Commits are local and are not pushed. Conflicting edits from another window are rejected; reload memory and reconcile them. If Git fails after saving, the UI explicitly reports that the file is saved but uncommitted, and a later Save retries the commit. Memory is limited to 6,000 characters. The model cannot write it itself; only explicit editor saves persist preferences. Full chats and image bytes are not added to Git.
+
+Open [Image Chat](http://meesa.local:3002/image-chat) or choose **Image Chat** in Media Hub navigation. Upload a PNG/JPEG/WebP (up to 5 MiB), describe the intended result, and discuss critiques or revised prompts with the existing local Qwen model. Follow-up turns retain the conversation and uploaded images while the page stays open. Use **New chat** to clear it. Reloading clears the conversation; this version does not persist chat history. Up to two images and 24 messages fit in one conversation. Ctrl/Cmd+Enter sends; Stop cancels the request and restores the draft.
+
+The Windows hub calls the installed Ollama `local-coder` vision model on loopback port 11434. It needs Ollama running and that model installed; it installs no weights. Image Chat provides advice and prompt drafts, not automatic generation or image editing. Use the existing image generator for a chosen revision. Visual judgments may be wrong and need review.
+
+The browser route stays on the existing hub port and requires same-origin POSTs with an allowed hostname. No arbitrary file paths, model endpoints or system messages are accepted from the browser. Uploads and conversation data are held in memory for each request, not written by the hub. Like other Media Hub browser pages, it is for users on the trusted LAN. Requests are serialized within the hub, time out at 120 seconds, and keep the Ollama model warm for two minutes between messages to reduce follow-up delays. Other clients can still use the GPU concurrently. Files-only/macOS profiles refuse these routes and do not forward model calls.
+
 ## Party notes through Media Hub
 
 On Windows, open [Party notes](http://meesa.local:3002/party/) or use the website’s Party notes navigation. The hub mounts the existing DOS2 party server behind its existing port, preserving page navigation and `?refresh=1`. Agents discover `party-notes` and call the named operations. The backend stays on loopback port 8765; notes and save-reading code remain in the RPG project. This is LAN access, not internet publication.
