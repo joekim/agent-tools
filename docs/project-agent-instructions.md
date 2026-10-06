@@ -13,6 +13,17 @@ Assume the user will open deliverables on a phone on the same local network. For
 
 If the user needs access outside the network, call the same tool with `"audience":"external"`. Media Hub uploads to Dropbox `/ai-workspace` and returns a verified public share link. Do not make internet copies by default. Only report success when `status` is `ready` and a URL is returned. On a failed or ambiguous upload, inspect the reported destination before retrying; do not invent a link or equate a local Dropbox copy with confirmed cloud sharing.
 
+For a Dropbox direct-download share link, discover `media-hub.publish`, then use `call_tool` with the owning `nodeId`, `name: "media-hub.publish"`, and `input: { "path": "ABSOLUTE_FILE_PATH", "audience": "external" }`. This requires the user's request for internet sharing. Publish the individual file for an individual download; a folder publication returns a folder share link. The hub uploads through Dropbox's API and does not depend on desktop folder syncing. Require the returned result's `status: "ready"` and `url` before constructing a download link. Parse that URL, remove `raw`, set `dl=1`, and preserve `rlkey` and all other query parameters:
+
+```js
+const download = new URL(result.url);
+download.searchParams.delete('raw');
+download.searchParams.set('dl', '1');
+const downloadUrl = download.href;
+```
+
+Return `[Download filename](downloadUrl)` using the actual URL. For an existing Dropbox share link, apply only the URL conversion; do not upload another copy. Never invent a share token or derive a public URL from a local path. `dl=1` requests downloading; `raw=1` requests browser rendering. Dropbox documents this at https://help.dropbox.com/share/force-download. If publication fails, follow the diagnostics and destination-inspection instructions below; changing URL parameters cannot fix a failed upload or missing sharing permission.
+
 Run `media-hub.diagnostics` for setup or sharing failures; optionally pass the same `path`. Report which checks passed and any specific blocker. A check from the host does not prove phone DNS/firewall access. Dropbox read access does not prove upload or public-link permission; use `probeExternal:true` to test those with a temporary synthetic file and clean it up. Report cleanup failures. Never fall back to internet sharing without an external-sharing request.
 
 Use `media-hub.transcript` for YouTube captions on either machine, then publish its returned text-file path if the user needs a mobile link. Poll image/voice job IDs and inspect results before reporting generation success. macOS exposes no model use. Credentials stay in native OS storage on the owning hub: never put them in chat, source, or `.env` files.
