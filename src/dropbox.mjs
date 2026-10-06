@@ -13,6 +13,9 @@ export async function dropboxClient(config, { secret = loadSecret, fetcher = fet
       const response = await fetcher('https://api.dropboxapi.com/oauth2/token', { method: 'POST', body, redirect: 'error', signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error();
       token = (await response.json()).access_token;
+    } else if (settings.accessCredentialParts) {
+      if (!Array.isArray(settings.accessCredentialParts) || !settings.accessCredentialParts.length || settings.accessCredentialParts.some(name => typeof name !== 'string' || !name)) throw new Error();
+      token = settings.accessCredentialParts.map(name => secret(name)).join('');
     } else if (settings.credential) token = secret(settings.credential);
     if (!token) throw new Error();
   } catch { throw new Error('Dropbox authorization unavailable or expired; reconnect the hub using native credential storage.'); }
