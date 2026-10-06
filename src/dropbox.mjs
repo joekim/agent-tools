@@ -26,7 +26,18 @@ export async function dropboxClient(config, { secret = loadSecret, fetcher = fet
       if (bytes) headers['Dropbox-API-Arg'] = JSON.stringify(args).replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
       response = await fetcher(`https://${bytes ? 'content' : 'api'}.dropboxapi.com/2/${operation}`, { method: 'POST', headers, body: bytes || JSON.stringify(args), redirect: 'error', signal: AbortSignal.timeout(60000) });
     } catch { throw new Error('Dropbox request timed out or could not connect; completion may be ambiguous. Inspect the destination before retrying.'); }
-    if (!response.ok) throw new Error(`Dropbox ${operation} failed (HTTP ${response.status}); check authorization, scopes and account policy.`);
+    if (!response.ok) {
+      const error = new Error(`Dropbox ${operation} failed (HTTP ${response.status}); check authorization, scopes and account policy.`);
+      // Expose only allowlisted error categories, never provider bodies or secrets.
+      if (response.status === 409) {
+        const body = await response.json().catch(() => ({}));
+        const tag = body.error?.['.tag'];
+        const pathTag = body.error?.path?.['.tag'];
+        if (tag === 'path' && ['not_found', 'conflict'].includes(pathTag)) error.dropboxCode = pathTag;
+        if (tag === 'shared_link_already_exists') error.dropboxCode = tag;
+      }
+      throw error;
+    }
     return response.json();
   };
 }

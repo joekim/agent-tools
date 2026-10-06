@@ -46,15 +46,20 @@ test('external publish uses ai-workspace and verifies public access, without exp
   const { source, config } = await fixture(t); const calls = [];
   const client = async () => async (op, args, bytes) => {
     calls.push({ op, args, bytes });
+    if (op === 'files/get_metadata') throw Object.assign(new Error('not found'), { dropboxCode: 'not_found' });
+    if (op === 'sharing/list_shared_links') return { links: [] };
     if (op.startsWith('sharing/')) return { url: 'https://www.dropbox.com/scl/fi/example/hello.txt?dl=0', link_permissions: { resolved_visibility: { '.tag': 'public' } } };
     return {};
   };
-  const result = await publish({ path: source, audience: 'external' }, config, { dropboxClient: client });
+  const result = await publish({ path: source, audience: 'external', project: 'sample' }, config, { dropboxClient: client });
   assert.equal(result.status, 'ready'); assert(result.remotePath.startsWith('/ai-workspace/'));
-  assert.equal(calls[1].bytes.toString(), 'hello phone'); assert.equal(calls[2].args.settings.requested_visibility, 'public');
+  assert.equal(calls.find(c => c.op === 'files/upload').bytes.toString(), 'hello phone'); assert.equal(calls.find(c => c.op === 'sharing/create_shared_link_with_settings').args.settings.requested_visibility, 'public');
   const hub = new Hub(config); await hub.start(); t.after(() => hub.close());
   assert.equal((await fetch(`http://127.0.0.1:${hub.server.address().port}/shared/${result.id}/`)).status, 404);
-  const blocked = await publish({ path: source, audience: 'external' }, config, { dropboxClient: async () => async op => op.startsWith('sharing/') ? { url: 'https://www.dropbox.com/example', link_permissions: { resolved_visibility: { '.tag': 'team_only' } } } : {} });
+  const blocked = await publish({ path: source, audience: 'external', project: 'sample' }, config, { dropboxClient: async () => async op => {
+    if (op === 'files/get_metadata') throw Object.assign(new Error('not found'), { dropboxCode: 'not_found' });
+    return op.startsWith('sharing/') ? { url: 'https://www.dropbox.com/example', link_permissions: { resolved_visibility: { '.tag': 'team_only' } } } : {};
+  } });
   assert.equal(blocked.status, 'failed'); assert.equal(blocked.url, undefined); assert(blocked.remotePath);
 });
 

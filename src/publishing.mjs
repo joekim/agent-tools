@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { dropboxClient } from './dropbox.mjs';
+import { externalTarget, publishProject } from './project-publishing.mjs';
 
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const encode = value => value.split('/').map(encodeURIComponent).join('/');
@@ -41,7 +42,8 @@ export async function publish(input, config, dependencies = {}) {
   if (!['lan', 'external'].includes(audience)) throw new Error('Unknown sharing audience.');
   const origin = audience === 'lan' ? lanOrigin(config) : null;
   const inventory = await inspectPath(input.path);
-  const api = audience === 'external' ? await (dependencies.dropboxClient || dropboxClient)(config) : null;
+  if (audience === 'lan' && (input.project !== undefined || input.relativePath !== undefined)) throw new Error('project and relativePath apply only to external publishing.');
+  const target = audience === 'external' ? externalTarget(input, config, inventory.directory) : null;
   const id = randomUUID();
   const root = publicationRoot(config);
   const staging = path.join(root, `.pending-${id}`);
@@ -60,21 +62,11 @@ export async function publish(input, config, dependencies = {}) {
     await fs.writeFile(path.join(staging, 'manifest.json'), JSON.stringify(record));
     await fs.rename(staging, destination);
     if (audience === 'external') {
-      const remote = `/ai-workspace/${id}`;
+      const remote = target.remotePath;
       try {
-        await api('files/create_folder_v2', { path: remote, autorename: false });
-        const parents = new Set();
-        for (const file of record.files) {
-          const parts = file.name.split('/'); parts.pop(); let parent = remote;
-          for (const part of parts) { parent += `/${part}`; if (!parents.has(parent)) { await api('files/create_folder_v2', { path: parent, autorename: false }); parents.add(parent); } }
-          await api('files/upload', { path: `${remote}/${file.name}`, mode: 'add', autorename: false, mute: true }, await fs.readFile(path.join(destination, 'files', file.name)));
-        }
-        const sharedPath = inventory.directory ? remote : `${remote}/${record.files[0].name}`;
-        const link = await api('sharing/create_shared_link_with_settings', { path: sharedPath, settings: { requested_visibility: 'public' } });
-        if (link.link_permissions?.resolved_visibility?.['.tag'] !== 'public') throw new Error('Dropbox did not grant public link access; check account sharing policy.');
-        const url = new URL(link.url);
-        if (url.protocol !== 'https:' || !/(^|\.)dropbox\.com$/i.test(url.hostname)) throw new Error('Dropbox returned an unexpected share URL.');
-        record.url = url.href; record.remotePath = remote;
+        const api = await (dependencies.dropboxClient || dropboxClient)(config);
+        Object.assign(record, await publishProject(api, target, record.files, inventory.directory, file => fs.readFile(path.join(destination, 'files', file.name))));
+        record.remotePath = remote; record.project = target.project;
       } catch (error) {
         record.status = 'failed'; record.remotePath = remote;
         await fs.writeFile(path.join(destination, 'manifest.json'), JSON.stringify(record));
@@ -83,7 +75,7 @@ export async function publish(input, config, dependencies = {}) {
     } else record.url = `${origin}/shared/${id}/`;
     record.status = 'ready';
     await fs.writeFile(path.join(destination, 'manifest.json'), JSON.stringify(record));
-    return { status: 'ready', audience, id, url: record.url, files: record.files.length, bytes: record.bytes, ...(record.remotePath ? { remotePath: record.remotePath } : { mobileAccess: 'Same network; the host must be awake. Phone reachability has not been tested.' }) };
+    return { status: 'ready', audience, id, url: record.url, files: record.files.length, bytes: record.bytes, ...(record.remotePath ? { project: record.project, remotePath: record.remotePath, downloadUrl: record.downloadUrl, revisions: record.revisions } : { mobileAccess: 'Same network; the host must be awake. Phone reachability has not been tested.' }) };
   } catch (error) { await fs.rm(staging, { recursive: true, force: true }); throw error; }
 }
 
